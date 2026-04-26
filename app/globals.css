@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f0ebe4;
+  --foreground: #15120f;
+  --mc-dark: #1c1812;
+  --mc-ink: #191510;
+  --mc-light: #f0ebe4;
+  --mc-muted: #e5ddd2;
+  --mc-accent: #ff5524;
+  --font-body: "Avenir Next", "Avenir", "Segoe UI", sans-serif;
+  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+  --font-logo: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+  --font-number: "Arial Narrow", "Franklin Gothic Medium", sans-serif;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-body);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  text-rendering: optimizeLegibility;
+}
+
+a,
+button,
+input {
+  transition:
+    color 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease,
+    box-shadow 180ms ease;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--mc-accent) 70%, white 30%);
+  color: white;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-logo {
+  font-family: var(--font-logo);
+}
+
+.font-number {
+  font-family: var(--font-number);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
