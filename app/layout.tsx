@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ModaCert | Luxury Authentication for Bags, Watches, Shoes & More",
+  title: "ModaCert | Bag Authentication",
   description:
-    "Authenticate designer handbags, shoes, watches, clothing, jewelry, and accessories with ModaCert's expert luxury verification workflow.",
+    "Authenticate designer handbags with ModaCert's bag-only launch flow for brand selection, rates, photo guidance, and static upload steps.",
 };
 
 export default function RootLayout({

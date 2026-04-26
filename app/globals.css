@@ -1,23 +1,36 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f0ebe4;
-  --foreground: #15120f;
-  --mc-dark: #1c1812;
-  --mc-ink: #191510;
-  --mc-light: #f0ebe4;
-  --mc-muted: #e5ddd2;
-  --mc-accent: #ff5524;
-  --font-body: "Avenir Next", "Avenir", "Segoe UI", sans-serif;
-  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+  --background: #f4eee6;
+  --foreground: #16120e;
+  --mc-cream: #f4eee6;
+  --mc-soft: #fff9f2;
+  --mc-muted: #e8d9ca;
+  --mc-ink: #16120e;
+  --mc-brown: #4b2b13;
+  --mc-brown-soft: #8a4a11;
+  --mc-orange: #f47a13;
+  --mc-orange-dark: #aa4d00;
+  --font-body: "Avenir Next", Avenir, "Segoe UI", sans-serif;
   --font-logo: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
-  --font-number: "Arial Narrow", "Franklin Gothic Medium", sans-serif;
+  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-mc-cream: var(--mc-cream);
+  --color-mc-soft: var(--mc-soft);
+  --color-mc-muted: var(--mc-muted);
+  --color-mc-ink: var(--mc-ink);
+  --color-mc-brown: var(--mc-brown);
+  --color-mc-brown-soft: var(--mc-brown-soft);
+  --color-mc-orange: var(--mc-orange);
+  --color-mc-orange-dark: var(--mc-orange-dark);
   --font-sans: var(--font-body);
+  --shadow-card: 0 22px 50px rgba(69, 38, 13, 0.14);
+  --shadow-soft: 0 16px 34px rgba(28, 18, 9, 0.2);
+  --shadow-orange: 0 18px 36px rgba(244, 122, 19, 0.32);
 }
 
 *,
@@ -46,24 +59,46 @@ input {
     background-color 180ms ease,
     border-color 180ms ease,
     transform 180ms ease,
-    box-shadow 180ms ease;
+    box-shadow 180ms ease,
+    opacity 180ms ease;
+}
+
+button:disabled {
+  cursor: not-allowed;
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--mc-accent) 70%, white 30%);
+  background: var(--mc-orange);
   color: white;
 }
 
-.font-display {
-  font-family: var(--font-display);
-}
-
+.font-display,
 .font-logo {
   font-family: var(--font-logo);
 }
 
-.font-number {
-  font-family: var(--font-number);
+.bg-hero {
+  background:
+    radial-gradient(circle at 76% 12%, rgba(244, 122, 19, 0.38), transparent 29%),
+    linear-gradient(180deg, #20150e 0%, #4b2b13 56%, #8a4a11 100%);
+}
+
+.bg-product {
+  background:
+    radial-gradient(circle at 50% 22%, rgba(255, 255, 255, 0.9), transparent 28%),
+    linear-gradient(180deg, #fff6eb 0%, #e6c6a7 100%);
+}
+
+.bg-rate {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(244, 122, 19, 0.35), transparent 36%),
+    linear-gradient(180deg, #221108 0%, #854000 100%);
+}
+
+.qr-grid {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  gap: 4px;
 }
 
 @media (prefers-reduced-motion: reduce) {
