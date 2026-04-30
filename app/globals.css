@@ -95,10 +95,29 @@ button:disabled {
     linear-gradient(180deg, #221108 0%, #854000 100%);
 }
 
+.bg-cta {
+  background:
+    radial-gradient(circle at 80% 80%, rgba(244, 122, 19, 0.25), transparent 40%),
+    linear-gradient(135deg, #20150e 0%, #4b2b13 50%, #8a4a11 100%);
+}
+
+.bg-why {
+  background:
+    linear-gradient(180deg, #faf5ef 0%, #f4eee6 100%);
+}
+
 .qr-grid {
   display: grid;
   grid-template-columns: repeat(9, minmax(0, 1fr));
   gap: 4px;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

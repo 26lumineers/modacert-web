@@ -8,13 +8,18 @@ export default function RatesPage() {
         <div className="mx-auto max-w-7xl">
           <SectionTitle
             eyebrow="Unlock our rates"
-            title="Select a bag authentication rate."
-            description="The current launch flow only accepts handbags. Other luxury categories stay disabled until their review process is ready."
+            title="Simple, Transparent Pricing"
+            description="Double-verified by Two Experts for 99% accuracy at an affordable price"
           />
           <div className="mt-10 grid gap-6 lg:grid-cols-3">
             {rates.map((rate) => (
               <RateCard key={rate.name} rate={rate} />
             ))}
+          </div>
+          <div className="mt-9 text-center">
+            <p className="mt-4 text-sm text-mc-ink/60">
+              Starting from $20 per authentication
+            </p>
           </div>
         </div>
       </section>
