@@ -4,46 +4,212 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
-# ModaCert Web (Next.js Frontend)
+# ModaCert Web
 
-## Stack
-- Next.js (App Router) + TypeScript + Tailwind CSS v4
-- PayPal: `@paypal/react-paypal-js`
-- HTTP: `axios` (API clients in `app/_lib/api.ts`)
+> Luxury authentication platform — Next.js frontend for authenticating designer goods via expert review.
 
-## API Service Layer
-- `app/_lib/api.ts` — axios instances for user-service (`/api/v1`) and payment-service (`/api/v1`)
-- `app/_lib/auth.ts` — localStorage token/user persistence
+---
 
-## Service URLs (from `.env.local`)
-- `NEXT_PUBLIC_USER_SERVICE_URL=http://localhost:3005`
-- `NEXT_PUBLIC_PAYMENT_SERVICE_URL=http://localhost:3002`
-- `NEXT_PUBLIC_PAYPAL_CLIENT_ID` — PayPal sandbox client ID
+## Tech Stack
 
-## Key Pages
-- `/` — Homepage (hero, trust bar, categories, brand search, how-it-works, NFC, rates, CTA, footer)
-- `/checkout` — 4-step flow: auth → brand selection → photo upload → PayPal payment
-- `/brands`, `/rates`, `/authenticate`, `/signin`, `/upload` — Content pages
+| Layer | Choice |
+|---|---|
+| Framework | Next.js 16 (App Router) |
+| Language | TypeScript 5 |
+| Styling | Tailwind CSS v4 (CSS-first config) |
+| HTTP | Axios (two instances — user-service & payment-service) |
+| Payments | PayPal (`@paypal/react-paypal-js`) |
+| Runtime deps | React 19, axios 1.15 |
+
+---
+
+## Project Structure
+
+```
+app/
+├── _lib/
+│   ├── api.ts            # Axios instances, interceptors, all API functions
+│   ├── api-loading.tsx   # Global loading overlay (subscribes to api.ts request counter)
+│   └── auth.ts           # localStorage token/user helpers
+├── layout.tsx            # Root layout — renders <ApiLoadingOverlay/> + children
+├── globals.css           # Tailwind v4 @theme config, custom gradients, design tokens
+├── page.tsx              # Homepage
+├── checkout/page.tsx      # 4-step checkout flow
+├── components.tsx         # Shared UI components
+├── data.ts                # Static data (categories, etc.)
+├── authenticate/          # Authenticate info page
+├── brands/                # Brands listing page
+├── rates/                 # Rates page
+├── signin/                # Sign-in page
+├── upload/                # Upload info page
+└── payment/               # Payment info page
+```
+
+---
+
+## Environment Variables (`.env.local`)
+
+| Variable | Example | Purpose |
+|---|---|---|
+| `NEXT_PUBLIC_USER_SERVICE_URL` | `http://localhost:3005` | User/auth/brand/upload backend |
+| `NEXT_PUBLIC_PAYMENT_SERVICE_URL` | `http://localhost:3002` | PayPal payment backend |
+| `NEXT_PUBLIC_PAYPAL_CLIENT_ID` | `A...` | PayPal sandbox client ID |
+
+---
+
+## API Service Layer (`app/_lib/api.ts`)
+
+### Architecture
+
+Two Axios instances share a unified interceptor pipeline:
+
+```
+userApi ──┐
+          ├── request interceptor (activeRequests++, notify loading overlay)
+          ├── response interceptor (activeRequests--, notify; JWT-expired → redirect)
+paymentApi ┘
+```
+
+### Auto-Features (no per-call code needed)
+
+| Feature | How |
+|---|---|
+| **Auth header** | `setAuthToken(token)` sets `Authorization: Bearer` on both instances |
+| **JWT expiry redirect** | Response interceptor catches `401` or messages like `"jwt expired"` → calls `clearAuth()` + `setAuthToken(null)` + `window.location.href = "/signin"` |
+| **Global loading overlay** | Request/response interceptors maintain an `activeRequests` counter; `onApiLoadingChange(listener)` notifies subscribers → `<ApiLoadingOverlay/>` renders a centered spinner with backdrop blur |
+
+### API Endpoints
+
+| Function | Method | Service | Path |
+|---|---|---|---|
+| `login(email, password)` | POST | user | `/auth/login` |
+| `fetchBrands()` | GET | user | `/brands` |
+| `fetchBrandModels(brandId)` | GET | user | `/brands/:id/models` |
+| `requestPresignUrls(payload)` | POST | user | `/upload/presign` |
+| `uploadToPresignedUrl(url, file)` | PUT | S3 | (presigned URL) |
+| `confirmUpload(requestId)` | POST | user | `/upload/confirm` |
+| `createPayPalOrder(payload)` | POST | payment | `/payments/paypal/create-order` |
+| `capturePayPalOrder(payload)` | POST | payment | `/payments/paypal/capture` |
+
+---
+
+## Auth (`app/_lib/auth.ts`)
+
+- **Storage**: `localStorage` keys `modacert_token` and `modacert_user`
+- **Functions**: `getStoredToken()`, `getStoredUser()`, `saveAuth(token, user)`, `clearAuth()`
+- **Session restore**: `checkout/page.tsx` reads stored token on mount → skips to brand step if found
+
+---
+
+## Global Loading Overlay (`app/_lib/api-loading.tsx`)
+
+- Renders a full-screen semi-transparent overlay (`bg-mc-ink/20 backdrop-blur`) with a white card spinner
+- Subscribes to `onApiLoadingChange()` from `api.ts`
+- Only visible when `activeRequests > 0`
+- Hydration-safe via `useHydrated()` hook
+- Wired into `app/layout.tsx` so **every** page gets it for free
+
+---
 
 ## Design System
-- Tailwind v4 with custom theme in `app/globals.css` (CSS-first config)
-- Color tokens: `mc-cream`, `mc-ink`, `mc-orange`, `mc-orange-dark`, `mc-muted`
-- Font: Inter via Google Fonts
-- Rounded corners: `rounded-[1.2rem]` to `rounded-[1.6rem]` for cards
-- Shadows: `shadow-card`, `shadow-orange`
-- Hydration fix: `useHydrated()` hook using `useSyncExternalStore`
+
+### Color Tokens
+
+| Token | Hex | Usage |
+|---|---|---|
+| `mc-cream` | `#f4eee6` | Page background |
+| `mc-soft` | `#fff9f2` | Light card backgrounds |
+| `mc-muted` | `#e8d9ca` | Borders, dividers, disabled states |
+| `mc-ink` | `#16120e` | Primary text |
+| `mc-brown` | `#4b2b13` | Dark accents |
+| `mc-brown-soft` | `#8a4a11` | Secondary accents |
+| `mc-orange` | `#f47a13` | Brand accent, CTAs, active states |
+| `mc-orange-dark` | `#aa4d00` | Hover states |
+
+### Shadows
+
+| Name | Value |
+|---|---|
+| `shadow-card` | `0 22px 50px rgba(69, 38, 13, 0.14)` |
+| `shadow-soft` | `0 16px 34px rgba(28, 18, 9, 0.2)` |
+| `shadow-orange` | `0 18px 36px rgba(244, 122, 19, 0.32)` |
+
+### Conventions
+
+- **Rounded corners**: `rounded-[1.2rem]` (small cards) → `rounded-[1.6rem]` (large panels)
+- **Buttons**: `rounded-full`, `bg-mc-orange`, `shadow-orange`, `hover:bg-mc-orange-dark`
+- **Fonts**: `font-body` (Avenir Next), `font-logo` / `font-display` (Iowan Old Style)
+- **Hydration fix**: Always use `useHydrated()` hook (`useSyncExternalStore`) before rendering client-only UI
+
+### Custom Background Classes
+
+| Class | Purpose |
+|---|---|
+| `bg-hero` | Dark gradient with orange radial glow — hero section |
+| `bg-product` | Warm cream-to-sand gradient — product showcase |
+| `bg-rate` | Dark-to-amber gradient — pricing section |
+| `bg-cta` | Diagonal dark gradient — call-to-action |
+| `bg-why` | Subtle cream fade — "why" section |
+
+---
 
 ## Checkout Flow
-1. Auth — login via user-service `/api/v1/auth/login`
-2. Brand — fetch brands from `/api/v1/brands`, select one (no model selection needed)
-3. Upload — presign URLs via `/api/v1/upload/presign`, upload to S3, confirm
-4. Payment — PayPal order via payment-service `/api/v1/payments/paypal/create-order`
+
+```
+┌─────┐    ┌───────┐    ┌────────┐    ┌─────────┐    ┌──────┐
+│ Auth │───▶│ Brand │───▶│ Upload │───▶│ Payment │───▶│ Done │
+└─────┘    └───────┘    └────────┘    └─────────┘    └──────┘
+  login      select       presign       PayPal          success
+             brand        + S3          order +         page
+                          upload        capture
+```
+
+1. **Auth** — POST `/auth/login` → store token & user
+2. **Brand** — GET `/brands` → user picks one (price shown)
+3. **Upload** — POST `/upload/presign` → PUT to S3 → POST `/upload/confirm`
+4. **Payment** — PayPal Buttons widget → `createPayPalOrder` → `capturePayPalOrder`
+
+Required photos: `front`, `back`, `interior`, `logo`. Optional: `left`, `right`, `top`, `bottom`, `label_tag`, `serial_number`.
+
+---
 
 ## Commands
-- `npm run dev` — Next.js dev server on :3000
-- `npm run build` — Production build
-- `npm run lint` — ESLint
+
+| Command | Purpose |
+|---|---|
+| `npm run dev` | Dev server on `:3000` |
+| `npm run build` | Production build |
+| `npm run lint` | ESLint |
+| `npx tsc --noEmit` | Type-check only |
+
+---
 
 ## Known Issues
-- Kill zombie `bun` processes before starting services: `pkill -f "bun.*main.ts"`
-- Multiple stale Bun processes can bind port 3005, causing `CONNECTION_ENDED` errors
+
+- **Zombie Bun processes**: Kill stale `bun` processes before starting services (`pkill -f "bun.*main.ts"`). Multiple processes can bind port 3005 → `CONNECTION_ENDED` errors.
+- **S3 uploads bypass interceptors**: `uploadToPresignedUrl()` uses native `fetch`, not Axios — no loading overlay for direct S3 PUTs.
+
+---
+
+## Fake Payment Mode
+
+Set `NEXT_PUBLIC_PAYMENT_MODE=fake` in `.env.local` to skip PayPal entirely during development.
+
+When `PAYMENT_MODE=fake`:
+- The checkout page shows a "Pay ${price} Now" button instead of PayPal Buttons
+- Clicking the button calls `createPayPalOrder()` then `capturePayPalOrder()` against the payment-service
+- The payment-service `FakePayPalService` returns deterministic fake responses — no PayPal API calls
+- Both fake and real modes publish `payment.completed` to SQS, so downstream processing is identical
+- Set `NEXT_PUBLIC_PAYMENT_MODE=paypal` (or remove it) to use real PayPal
+
+The `PAYMENT_MODE` constant is exported from `app/_lib/api.ts`.
+
+---
+
+## Coding Conventions
+
+- No comments unless explicitly requested
+- Follow existing patterns in surrounding code
+- Use `app/_lib/api.ts` functions for all backend calls (never raw axios/fetch)
+- Always use `useHydrated()` before rendering client-only UI
+- Design tokens only — never hardcode colors or shadows

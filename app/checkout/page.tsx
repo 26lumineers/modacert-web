@@ -1,37 +1,79 @@
 "use client";
 
-import { useState, useEffect, useCallback, useSyncExternalStore } from "react";
+import { FormEvent, startTransition, useCallback, useEffect, useMemo, useState, useSyncExternalStore, ViewTransition } from "react";
+import Image from "next/image";
 import Link from "next/link";
-import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
+import { useRouter } from "next/navigation";
+import { PayPalButtons, PayPalScriptProvider } from "@paypal/react-paypal-js";
+import axios from "axios";
 import {
-  login,
-  fetchBrands,
-  requestPresignUrls,
-  uploadToPresignedUrl,
+  PAYMENT_MODE,
+  capturePayPalOrder,
   confirmUpload,
   createPayPalOrder,
-  capturePayPalOrder,
+  fetchBrands,
+  login,
+  requestPresignUrls,
   setAuthToken,
+  uploadToPresignedUrl,
   type Brand,
 } from "../_lib/api";
-import { getStoredToken, getStoredUser, saveAuth, clearAuth, type AuthUser } from "../_lib/auth";
+import { config } from "../_lib/config";
+import { clearAuth, getStoredToken, getStoredUser, saveAuth, type AuthUser } from "../_lib/auth";
+import { FloatingChatWidget, NavMenuMark, cx, navCtaClass, navHeaderClass, navMenuClass, navPillClass } from "../components";
+import { brandTiers, categories, checkoutPhotoSlots, figma } from "../data";
 
-const PHOTO_FIELDS = [
-  { key: "front", label: "Front view", desc: "Full item visible, clear lighting" },
-  { key: "back", label: "Back view", desc: "Back stitching and structure" },
-  { key: "interior", label: "Inside label", desc: "Interior label and tags" },
-  { key: "logo", label: "Brand Logo", desc: "Logo stamp or embossing" },
-  { key: "left", label: "Left side", desc: "Left side angle" },
-  { key: "right", label: "Right side", desc: "Right side angle" },
-  { key: "top", label: "Top view", desc: "Top of the item" },
-  { key: "bottom", label: "Bottom view", desc: "Bottom sole/base" },
-  { key: "label_tag", label: "Made in label", desc: "Country and factory code" },
-  { key: "serial_number", label: "Serial number", desc: "Date code or serial clearly shown" },
+const PAYPAL_CLIENT_ID = config.paypal.clientId;
+
+const flowSteps = [
+  { key: "brand", label: "Brand" },
+  { key: "category", label: "Category" },
+  { key: "nfc", label: "NFC" },
+  { key: "upload", label: "Photos" },
+  { key: "payment", label: "Payment" },
+  { key: "done", label: "Success" },
 ] as const;
 
-const PAYPAL_CLIENT_ID = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || "";
-
 const emptySubscribe = () => () => {};
+
+type CheckoutStep = "auth" | "brand" | "category" | "nfc" | "upload" | "payment" | "done";
+type ServiceError = "auth-service" | "brand-service" | "upload-service" | "payment-service" | null;
+type NfcMode = "with-nfc" | "without-nfc" | null;
+type BrandFilter = "all" | "street";
+
+const streetBrandNames = new Set(brandTiers.find((tier) => tier.label === "Street Brand")?.brands || []);
+const checkoutRetryAttempts = positiveInt(process.env.NEXT_PUBLIC_CHECKOUT_RETRY_ATTEMPTS, 3);
+const checkoutRetryWindowMs = positiveInt(process.env.NEXT_PUBLIC_CHECKOUT_RETRY_WINDOW_MS, 10000);
+const checkoutRetryDelayMs = checkoutRetryAttempts > 1 ? Math.floor(checkoutRetryWindowMs / (checkoutRetryAttempts - 1)) : 0;
+
+function positiveInt(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function isRetryableServiceError(err: unknown) {
+  if (!axios.isAxiosError(err)) return true;
+  if (!err.response) return true;
+  return err.response.status === 429 || err.response.status >= 500;
+}
+
+async function withCheckoutRetry<T>(task: () => Promise<T>, shouldRetry = isRetryableServiceError): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= checkoutRetryAttempts; attempt += 1) {
+    try {
+      return await task();
+    } catch (err) {
+      lastError = err;
+      if (attempt >= checkoutRetryAttempts || !shouldRetry(err)) throw err;
+      if (checkoutRetryDelayMs > 0) await wait(checkoutRetryDelayMs);
+    }
+  }
+  throw lastError;
+}
 
 function useHydrated() {
   return useSyncExternalStore(
@@ -41,484 +83,903 @@ function useHydrated() {
   );
 }
 
-type Step = "auth" | "brand" | "upload" | "payment" | "done" | "error";
-type ServiceError = "auth-service" | "brand-service" | "upload-service" | "payment-service" | null;
+function priceAmount(price: string | undefined) {
+  const normalized = (price || "20").replace(/[^0-9.]/g, "");
+  return normalized || "20";
+}
+
+function priceText(price: string | undefined) {
+  return `$${priceAmount(price)}`;
+}
+
+function amountNumber(price: string | undefined) {
+  return Number(priceAmount(price)) || 20;
+}
+
+function money(value: number) {
+  return `$${value.toFixed(value % 1 === 0 ? 0 : 2)}`;
+}
+
+function errorMessage(err: unknown, fallback: string) {
+  if (axios.isAxiosError(err)) {
+    const data = err.response?.data;
+    const msg = data?.error?.message || data?.message || data?.error || err.message;
+    if (!err.response) return fallback;
+    return typeof msg === "string" ? msg : fallback;
+  }
+  return err instanceof Error && err.message ? err.message : fallback;
+}
+
+function stepFromUrl(hasToken: boolean): CheckoutStep {
+  if (typeof window === "undefined") return hasToken ? "brand" : "auth";
+  const raw = new URLSearchParams(window.location.search).get("step");
+  if (!raw) return hasToken ? "brand" : "auth";
+  if (raw === "success") return hasToken ? "done" : "auth";
+  if (raw === "done" || raw === "payment" || raw === "upload" || raw === "nfc" || raw === "category" || raw === "brand") {
+    return hasToken ? raw : "auth";
+  }
+  return hasToken ? "brand" : "auth";
+}
+
+function initialToken() {
+  return getStoredToken();
+}
+
+function initialUser() {
+  return getStoredUser();
+}
+
+function initialStep() {
+  return stepFromUrl(!!getStoredToken());
+}
 
 export default function CheckoutPage() {
+  const router = useRouter();
   const hydrated = useHydrated();
-
-  const [token, setToken] = useState<string | null>(null);
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [step, setStep] = useState<Step>("auth");
-
+  const [token, setToken] = useState<string | null>(initialToken);
+  const [user, setUser] = useState<AuthUser | null>(initialUser);
+  const [step, setStep] = useState<CheckoutStep>(initialStep);
+  const [stepDirection, setStepDirection] = useState<"forward" | "back">("forward");
   const [brands, setBrands] = useState<Brand[]>([]);
+  const [brandsLoading, setBrandsLoading] = useState(false);
   const [selectedBrand, setSelectedBrand] = useState<Brand | null>(null);
-
+  const [customBrand, setCustomBrand] = useState("");
+  const [otherBrandOpen, setOtherBrandOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [nfcMode, setNfcMode] = useState<NfcMode>(null);
   const [photos, setPhotos] = useState<Record<string, File | null>>({});
   const [requestId, setRequestId] = useState<string | null>(null);
-
-  const [error, setError] = useState("");
   const [serviceError, setServiceError] = useState<ServiceError>(null);
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [brandsLoading, setBrandsLoading] = useState(false);
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loginErr, setLoginErr] = useState("");
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [pendingHref, setPendingHref] = useState("/");
 
-  useEffect(() => {
-    const t = getStoredToken();
-    const u = getStoredUser();
-    if (t && u) {
-      setToken(t);
-      setUser(u);
-      setAuthToken(t);
-      setStep("brand");
-    }
-  }, []);
-
-  useEffect(() => {
-    if (step !== "brand") return;
-    if (brands.length > 0) return;
+  const loadBrands = useCallback(async (force = false) => {
+    if (!force && (brands.length > 0 || brandsLoading)) return;
     setBrandsLoading(true);
     setServiceError(null);
-    fetchBrands()
-      .then((data) => {
-        setBrands(data);
-        setBrandsLoading(false);
-      })
-      .catch(() => {
-        setServiceError("brand-service");
-        setBrandsLoading(false);
-      });
-  }, [step, brands.length]);
+    setError("");
+    try {
+      const data = await withCheckoutRetry(fetchBrands);
+      setBrands(data.filter((brand) => brand.isActive !== false));
+    } catch (err) {
+      setBrands([]);
+      setServiceError("brand-service");
+      setError(errorMessage(err, "Service unavailable. Please try again later."));
+    } finally {
+      setBrandsLoading(false);
+    }
+  }, [brands.length, brandsLoading]);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginErr("");
+  useEffect(() => {
+    if (token) setAuthToken(token);
+  }, [token]);
+
+  useEffect(() => {
+    if (!hydrated || !token || step !== "brand") return;
+    const timer = window.setTimeout(() => {
+      void loadBrands();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [hydrated, loadBrands, step, token]);
+
+  const currentFlowIndex = flowSteps.findIndex((item) => item.key === step);
+  const brandName = selectedBrand?.name || customBrand;
+  const selectedPrice = priceText(selectedBrand?.price);
+  const selectedAmount = priceAmount(selectedBrand?.price);
+  const checkoutStarted = Boolean(token && (selectedBrand || customBrand || selectedCategory || nfcMode || Object.values(photos).some(Boolean) || requestId));
+
+  const requiredPhotosReady = useMemo(
+    () => checkoutPhotoSlots.filter((field) => field.required).every((field) => photos[field.key]),
+    [photos],
+  );
+
+  useEffect(() => {
+    if (!checkoutStarted || step === "done") return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    const handlePopState = () => {
+      window.history.pushState({ checkoutGuard: true }, "", window.location.href);
+      setPendingHref("/");
+      setLeaveOpen(true);
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.history.pushState({ checkoutGuard: true }, "", window.location.href);
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [checkoutStarted, step]);
+
+  const goTo = useCallback((next: CheckoutStep) => {
+    const from = flowSteps.findIndex((item) => item.key === step);
+    const to = flowSteps.findIndex((item) => item.key === next);
+    setStepDirection(to >= from ? "forward" : "back");
+    startTransition(() => {
+      setStep(next);
+      setError("");
+      setServiceError(null);
+    });
+  }, [step]);
+
+  function guardedNavigate(href: string) {
+    if (checkoutStarted && step !== "done") {
+      setPendingHref(href);
+      setLeaveOpen(true);
+      return;
+    }
+    router.push(href, { transitionTypes: ["nav-back"] });
+  }
+
+  function confirmLeave() {
+    setLeaveOpen(false);
+    router.push(pendingHref, { transitionTypes: ["nav-back"] });
+  }
+
+  async function handleLogin(event: FormEvent) {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
     setServiceError(null);
     try {
-      const res = await login(email, password);
-      setToken(res.accessToken);
-      setUser(res.user);
-      saveAuth(res.accessToken, res.user);
-      setStep("brand");
+      const response = await withCheckoutRetry(() => login(email, password));
+      setToken(response.accessToken);
+      setUser(response.user);
+      saveAuth(response.accessToken, response.user);
+      goTo("brand");
     } catch (err) {
-      setServiceError("auth-service");
-      setLoginErr(err instanceof Error ? err.message : "Login failed. The authentication service may be unavailable.");
+      if (isRetryableServiceError(err)) setServiceError("auth-service");
+      if (axios.isAxiosError(err) && err.response?.status === 401) {
+        setError("Invalid email or password.");
+      } else {
+        setError(errorMessage(err, "Sign in failed."));
+      }
+    } finally {
+      setLoading(false);
     }
-  };
+  }
 
-  const handleLogout = () => {
-    setToken(null);
-    setUser(null);
+  function handleLogout() {
     clearAuth();
     setAuthToken(null);
+    setToken(null);
+    setUser(null);
+    setBrands([]);
+    setSelectedBrand(null);
+    setCustomBrand("");
+    setSelectedCategory("");
+    setNfcMode(null);
+    setPhotos({});
+    setRequestId(null);
     setStep("auth");
-  };
+  }
 
-  const handleSelectBrand = (brand: Brand) => {
-    setSelectedBrand(brand);
-  };
+  function handleOtherBrand(value: string) {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    setSelectedBrand(null);
+    setCustomBrand(trimmed);
+    setOtherBrandOpen(false);
+  }
 
-  const canProceedToUpload = !!selectedBrand;
+  function handlePhotoChange(key: string, file: File | null) {
+    setPhotos((current) => ({ ...current, [key]: file }));
+  }
 
-  const handleProceedToUpload = () => {
-    if (canProceedToUpload) {
-      setStep("upload");
-      setError("");
-    }
-  };
-
-  const handlePhotoChange = (key: string, file: File | null) => {
-    setPhotos((prev) => ({ ...prev, [key]: file }));
-  };
-
-  const hasRequiredPhotos = () => {
-    const required = ["front", "back", "interior", "logo"];
-    return required.every((k) => photos[k]);
-  };
-
-  const handleUpload = async () => {
-    if (!token || !selectedBrand) return;
+  async function handleUpload() {
+    if (!brandName || !token || !selectedCategory || !nfcMode || !requiredPhotosReady) return;
     setLoading(true);
     setError("");
     setServiceError(null);
     try {
       const photoTypes: string[] = [];
       const contentTypes: Record<string, string> = {};
-      for (const { key } of PHOTO_FIELDS) {
-        const file = photos[key];
-        if (file) {
-          photoTypes.push(key);
-          contentTypes[key] = file.type || "image/jpeg";
-        }
+      for (const field of checkoutPhotoSlots) {
+        const file = photos[field.key];
+        if (!file) continue;
+        photoTypes.push(field.key);
+        contentTypes[field.key] = file.type || "image/jpeg";
       }
-
-      const presignRes = await requestPresignUrls({
-        brand: selectedBrand.name,
-        model: selectedBrand.name,
+      const presign = await withCheckoutRetry(() => requestPresignUrls({
+        brand: brandName,
+        model: selectedCategory,
         photoTypes,
         contentTypes,
-      });
-
+        nfcData: nfcMode,
+      }));
+      const uploadedKeys: Record<string, string> = {};
       await Promise.all(
-        presignRes.uploadUrls.map(async ({ photoType, uploadUrl }) => {
+        presign.uploadUrls.map(async ({ photoType, uploadUrl, key }) => {
           const file = photos[photoType];
           if (!file) return;
           await uploadToPresignedUrl(uploadUrl, file);
+          uploadedKeys[photoType] = key;
         }),
       );
-
-      await confirmUpload(presignRes.requestId);
-      setRequestId(presignRes.requestId);
-      setStep("payment");
-    } catch (err) {
+      await withCheckoutRetry(() => confirmUpload(presign.requestId, uploadedKeys));
+      setRequestId(presign.requestId);
+      goTo("payment");
+    } catch {
       setServiceError("upload-service");
-      setError(err instanceof Error ? err.message : "Upload failed. The upload service may be unavailable.");
+      setError("Upload is unavailable right now.");
     } finally {
       setLoading(false);
     }
-  };
+  }
+
+  async function handleFakePayment() {
+    if (!brandName || !requestId) return;
+    setLoading(true);
+    setError("");
+    setServiceError(null);
+    try {
+      const order = await withCheckoutRetry(() => createPayPalOrder({
+        amount: selectedAmount,
+        currency: "USD",
+        referenceId: requestId,
+        itemName: `${brandName} Authentication`,
+        itemDescription: `ModaCert authentication service for ${brandName}`,
+        itemQuantity: 1,
+        itemPrice: selectedAmount,
+      }));
+      await withCheckoutRetry(() => capturePayPalOrder({ orderId: order.orderId, referenceId: requestId }));
+      goTo("done");
+    } catch {
+      setServiceError("payment-service");
+      setError("Payment is unavailable right now.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const handlePayPalCreateOrder = useCallback(async () => {
-    if (!selectedBrand || !requestId) {
-      throw new Error("Missing brand or request ID");
-    }
-    const res = await createPayPalOrder({
-      amount: selectedBrand.price,
+    if (!brandName || !requestId) throw new Error("Missing checkout request.");
+    const order = await withCheckoutRetry(() => createPayPalOrder({
+      amount: selectedAmount,
       currency: "USD",
       referenceId: requestId,
-    });
-    return res.orderId;
-  }, [selectedBrand, requestId]);
+      itemName: `${brandName} Authentication`,
+      itemDescription: `ModaCert authentication service for ${brandName}`,
+      itemQuantity: 1,
+      itemPrice: selectedAmount,
+      returnUrl: typeof window !== "undefined" ? `${window.location.origin}/checkout` : undefined,
+      cancelUrl: typeof window !== "undefined" ? `${window.location.origin}/checkout` : undefined,
+    }));
+    return order.orderId;
+  }, [brandName, requestId, selectedAmount]);
 
   const handlePayPalApprove = useCallback(
     async (data: { orderID: string }) => {
       if (!requestId) return;
       try {
-        await capturePayPalOrder({
-          OrderId: data.orderID,
-          referenceId: requestId,
-        });
-        setStep("done");
-      } catch (err) {
+        await withCheckoutRetry(() => capturePayPalOrder({ orderId: data.orderID, referenceId: requestId }));
+        goTo("done");
+      } catch {
         setServiceError("payment-service");
-        setError(err instanceof Error ? err.message : "Payment capture failed");
+        setError("Payment is unavailable right now.");
       }
     },
-    [requestId],
+    [goTo, requestId],
   );
 
   if (!hydrated) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-mc-cream">
+      <div className="grid min-h-screen place-items-center bg-mc-cream px-4 text-mc-ink">
         <div className="text-center">
           <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-mc-orange border-t-transparent" />
-          <p className="mt-4 text-sm text-mc-ink/60">Loading checkout...</p>
+          <p className="mt-4 text-sm font-semibold text-mc-ink/60">Loading checkout</p>
         </div>
       </div>
     );
   }
 
+  const stepClass = stepDirection === "forward" ? "nav-forward" : "nav-back";
+  const checkoutUnavailable = Boolean(serviceError);
+
   return (
-    <div className="min-h-screen bg-mc-cream">
-      <header className="sticky top-0 z-50 border-b border-black/8 bg-white/88 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-          <Link href="/" className="inline-flex items-center gap-2 text-mc-ink">
-            <span className="grid h-7 w-7 place-items-center rounded-full border border-current text-[11px] font-semibold">M</span>
-            <span className="font-logo text-xl tracking-[0.2em] sm:text-2xl">MODACERT</span>
-          </Link>
-          <div className="flex items-center gap-4">
-            {user && (
-              <span className="text-sm text-mc-ink/60">{user.email}</span>
-            )}
-            {token && (
-              <button onClick={handleLogout} className="text-sm font-semibold text-mc-orange hover:text-mc-orange-dark">
+    <main className="min-h-screen bg-white text-mc-ink">
+      <header className={navHeaderClass} style={{ viewTransitionName: "site-header" }}>
+        <div className={navPillClass}>
+          <NavMenuMark />
+          <button type="button" onClick={() => guardedNavigate("/")} className="inline-flex items-center gap-2 text-black">
+            <span className="relative h-[42px] w-[42px] sm:h-[54px] sm:w-[54px]">
+              <Image src={figma.mark} alt="" fill sizes="54px" className="object-contain" />
+            </span>
+            <span className="font-logo text-base tracking-[0.08em] sm:text-xl">MODACERT</span>
+          </button>
+          <div className={navMenuClass}>
+            <button type="button" onClick={() => guardedNavigate("/")} className="hidden md:inline">Home</button>
+            <button type="button" onClick={() => guardedNavigate("/checkout")} className="hidden md:inline">Authenticate</button>
+            <button type="button" onClick={() => guardedNavigate("/rates")} className="hidden md:inline">Rates</button>
+            <span className="relative hidden h-5 w-5 md:inline-block">
+              <Image src={figma.cart} alt="" fill sizes="20px" className="object-contain" />
+            </span>
+            {user ? <span className="hidden max-w-40 truncate text-mc-ink/65 lg:inline">{user.email}</span> : null}
+            {token ? (
+              <button type="button" onClick={handleLogout} className={navCtaClass}>
                 Sign Out
+              </button>
+            ) : (
+              <button type="button" onClick={() => guardedNavigate("/signin")} className={navCtaClass}>
+                Sign In
               </button>
             )}
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
-
-        {/* Service Error Banner */}
-        {serviceError && (
-          <div className="mb-6 rounded-[1.2rem] border border-red-200 bg-red-50 p-5">
-            <h3 className="text-sm font-bold text-red-800">Service Unavailable</h3>
-            <p className="mt-1 text-sm text-red-600">
-              {serviceError === "auth-service" && "The authentication service is currently unavailable. Please try again later."}
-              {serviceError === "brand-service" && "Could not load brands from the server. Please check your connection and try again."}
-              {serviceError === "upload-service" && "The upload service is currently unavailable. Your photos could not be submitted."}
-              {serviceError === "payment-service" && "The payment service is currently unavailable. Please try again later."}
-            </p>
-            <button
-              onClick={() => {
-                setServiceError(null);
-                setError("");
-                if (serviceError === "brand-service") {
-                  setBrands([]);
-                }
-              }}
-              className="mt-3 rounded-full bg-red-600 px-4 py-1.5 text-xs font-bold text-white transition hover:bg-red-700"
-            >
-              Retry
-            </button>
-          </div>
-        )}
-
-        {/* Step indicator */}
-        <div className="mb-10 flex items-center justify-center gap-2">
-          {(["auth", "brand", "upload", "payment", "done"] as Step[]).map((s, i) => (
-            <div key={s} className="flex items-center gap-2">
-              <span className={`grid h-8 w-8 place-items-center rounded-full text-xs font-bold transition ${
-                step === s ? "bg-mc-orange text-white shadow-orange" :
-                (["auth", "brand", "upload", "payment", "done"].indexOf(step) > i) ? "bg-mc-ink text-white" :
-                "bg-mc-muted text-mc-ink/45"
-              }`}>
-                {i + 1}
-              </span>
-              {i < 4 && <span className="h-px w-5 bg-mc-muted sm:w-10" />}
+      <section className="mx-auto max-w-[1265px] px-4 py-8 sm:px-6 lg:px-0">
+        <div className="mb-10 overflow-hidden rounded-[2rem] bg-workflow-hero p-5 text-mc-ink shadow-auth-panel lg:rounded-[50px] lg:p-8">
+          <div className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr] lg:items-center">
+            <div>
+              <p className="font-auth text-lg text-mc-orange">Moda checkout</p>
+              <h1 className="mt-2 font-auth text-4xl leading-none sm:text-6xl">True Luxury, Truly Verified</h1>
+              <p className="mt-4 max-w-xl text-sm leading-6 text-mc-ink/65">
+                Choose your brand, confirm your item, upload clear photos, and complete payment.
+              </p>
             </div>
-          ))}
+            <ol className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+              {flowSteps.map((item, index) => {
+                const isCurrent = item.key === step;
+                const isPast = currentFlowIndex > index;
+                return (
+                  <li key={item.key} className="rounded-[1rem] bg-white/75 p-3 text-center shadow-auth-google">
+                    <span className={cx("mx-auto grid h-8 w-8 place-items-center rounded-full text-xs font-bold", isCurrent && "bg-mc-orange text-white", isPast && "bg-black text-white", !isCurrent && !isPast && "bg-mc-nav-gray text-mc-ink/55")}>
+                      {index + 1}
+                    </span>
+                    <p className="mt-2 text-[11px] font-bold text-mc-ink/65">{item.label}</p>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
         </div>
 
-        {/* Step: Auth */}
-        {step === "auth" && (
-          <div className="rounded-[1.6rem] bg-white p-8 shadow-card">
-            <h2 className="text-2xl font-semibold">Sign In</h2>
-            <p className="mt-2 text-sm text-mc-ink/60">Log in to start your authentication</p>
-            <form onSubmit={handleLogin} className="mt-6 space-y-4">
+        {serviceError ? (
+          <UnavailablePanel serviceError={serviceError} error={error} onRetry={() => {
+            setServiceError(null);
+            setError("");
+            if (serviceError === "brand-service") {
+              setBrands([]);
+              void loadBrands(true);
+            }
+          }} />
+        ) : null}
+
+        {!checkoutUnavailable ? (
+        <ViewTransition key={step} enter={stepClass} exit={stepClass} default="none">
+          <div className="mx-auto max-w-[1190px]">
+            {step === "auth" ? (
+              <AuthStep email={email} password={password} error={error} loading={loading} onEmail={setEmail} onPassword={setPassword} onSubmit={handleLogin} />
+            ) : null}
+
+            {step === "brand" ? (
+              <BrandStep brands={brands} loading={brandsLoading} selectedBrand={selectedBrand} customBrand={customBrand} onSelect={(brand) => {
+                setSelectedBrand(brand);
+                setCustomBrand("");
+              }} onOther={() => setOtherBrandOpen(true)} onRetry={() => {
+                setBrands([]);
+                void loadBrands(true);
+              }} onNext={() => brandName && goTo("category")} unavailable={serviceError === "brand-service"} />
+            ) : null}
+
+            {step === "category" ? (
+              <CategoryStep selectedCategory={selectedCategory} onSelect={setSelectedCategory} onBack={() => goTo("brand")} onNext={() => selectedCategory && goTo("nfc")} />
+            ) : null}
+
+            {step === "nfc" ? (
+              <NfcStep brandName={brandName} selectedCategory={selectedCategory} nfcMode={nfcMode} onSelect={setNfcMode} onBack={() => goTo("category")} onNext={() => nfcMode && goTo("upload")} />
+            ) : null}
+
+            {step === "upload" ? (
+              <UploadStep brandName={brandName} selectedCategory={selectedCategory} nfcMode={nfcMode} photos={photos} loading={loading} canSubmit={requiredPhotosReady} onBack={() => goTo("nfc")} onPhotoChange={handlePhotoChange} onSubmit={handleUpload} />
+            ) : null}
+
+            {step === "payment" ? (
+              <PaymentStep brandName={brandName} requestId={requestId} amount={selectedPrice} loading={loading} onBack={() => goTo("upload")} onFakePayment={handleFakePayment} onCreateOrder={handlePayPalCreateOrder} onApprove={handlePayPalApprove} onPaymentUnavailable={(message) => {
+                setServiceError("payment-service");
+                setError(message);
+              }} />
+            ) : null}
+
+            {step === "done" ? (
+              <DoneStep requestId={requestId} brandName={brandName} selectedCategory={selectedCategory} amount={selectedPrice} />
+            ) : null}
+          </div>
+        </ViewTransition>
+        ) : null}
+      </section>
+
+      {otherBrandOpen ? <OtherBrandDialog onClose={() => setOtherBrandOpen(false)} onSubmit={handleOtherBrand} /> : null}
+      {leaveOpen ? <LeaveDialog onStay={() => setLeaveOpen(false)} onLeave={confirmLeave} /> : null}
+      <FloatingChatWidget />
+    </main>
+  );
+}
+
+function UnavailablePanel({ serviceError, error, onRetry }: { serviceError: ServiceError; error: string; onRetry: () => void }) {
+  const label = {
+    "auth-service": "Sign in unavailable",
+    "brand-service": "Brand list unavailable",
+    "upload-service": "Upload unavailable",
+    "payment-service": "Payment unavailable",
+  }[serviceError || "brand-service"];
+
+  return (
+    <div className="mb-6 rounded-[1.2rem] border border-mc-orange/35 bg-mc-soft p-5 shadow-card">
+      <h2 className="text-base font-bold text-mc-ink">{label}</h2>
+      <p className="mt-1 text-sm leading-6 text-mc-ink/62">{error || "Try again in a moment."}</p>
+      <button type="button" onClick={onRetry} className="mt-4 rounded-full bg-mc-orange px-5 py-2 text-sm font-bold text-white shadow-orange hover:bg-mc-orange-dark">
+        Dismiss
+      </button>
+    </div>
+  );
+}
+
+function AuthStep({ email, password, error, loading, onEmail, onPassword, onSubmit }: { email: string; password: string; error: string; loading: boolean; onEmail: (value: string) => void; onPassword: (value: string) => void; onSubmit: (event: FormEvent) => void }) {
+  return (
+    <section className="mx-auto grid max-w-5xl gap-6 rounded-[2rem] bg-white p-5 shadow-auth-panel lg:grid-cols-[0.9fr_1.1fr] lg:rounded-[50px] lg:p-8">
+      <div className="relative min-h-[360px] overflow-hidden rounded-[1.6rem] bg-figma-panel lg:rounded-l-[50px] lg:rounded-r-none">
+        <Image src={figma.hero} alt="ModaCert authentication" fill sizes="(min-width: 1024px) 30vw, 90vw" className="object-cover object-[58%_52%]" />
+        <div className="absolute inset-0 bg-white/10" />
+      </div>
+      <form onSubmit={onSubmit} className="self-center p-2 lg:p-6">
+        <p className="font-auth text-xl text-mc-orange">Sign in</p>
+        <h2 className="mt-2 font-auth text-4xl leading-tight">Start your Moda Check</h2>
+        <p className="mt-2 text-sm text-mc-ink/60">Please enter your details to continue authentication.</p>
+        <label htmlFor="checkout-email" className="mt-6 block text-sm font-bold">Email Address</label>
+        <input id="checkout-email" type="email" value={email} onChange={(event) => onEmail(event.target.value)} required className="mt-2 h-[46px] w-full rounded-[20px] bg-white px-5 text-sm shadow-auth-input outline-none ring-1 ring-black/5 focus:ring-2 focus:ring-mc-orange/35" placeholder="My Email" />
+        <label htmlFor="checkout-password" className="mt-4 block text-sm font-bold">Password</label>
+        <input id="checkout-password" type="password" value={password} onChange={(event) => onPassword(event.target.value)} required className="mt-2 h-[46px] w-full rounded-[20px] bg-white px-5 text-sm shadow-auth-input outline-none ring-1 ring-black/5 focus:ring-2 focus:ring-mc-orange/35" placeholder="Enter your password" />
+        {error ? <p className="mt-4 rounded-[1rem] bg-mc-orange/10 px-4 py-3 text-sm font-semibold text-mc-orange-dark">{error}</p> : null}
+        <button type="submit" disabled={loading} className="mt-6 h-[46px] w-full rounded-[20px] bg-black px-6 font-auth text-2xl text-white shadow-auth-input hover:bg-mc-brown disabled:opacity-55">
+          {loading ? "Signing in" : "Sign in"}
+        </button>
+        <Link href="/signup" transitionTypes={["nav-forward"]} className="mt-5 block text-center text-sm font-bold text-mc-orange">
+          New user? Create your account
+        </Link>
+      </form>
+    </section>
+  );
+}
+
+function BrandStep({
+  brands,
+  loading,
+  selectedBrand,
+  customBrand,
+  unavailable,
+  onSelect,
+  onOther,
+  onRetry,
+  onNext,
+}: {
+  brands: Brand[];
+  loading: boolean;
+  selectedBrand: Brand | null;
+  customBrand: string;
+  unavailable: boolean;
+  onSelect: (brand: Brand) => void;
+  onOther: () => void;
+  onRetry: () => void;
+  onNext: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<BrandFilter>("all");
+  const visibleBrands = brands;
+  const filteredByTier = filter === "street" ? visibleBrands.filter((brand) => streetBrandNames.has(brand.name)) : visibleBrands;
+  const filtered = search ? filteredByTier.filter((brand) => brand.name.toLowerCase().includes(search.toLowerCase())) : filteredByTier;
+
+  return (
+    <section>
+      <div className="mx-auto max-w-3xl text-center">
+        <p className="font-auth text-2xl text-mc-orange">Choose your Brand</p>
+        <h2 className="mt-3 font-auth text-4xl leading-tight sm:text-6xl">Let us know your brand before verification</h2>
+        <div className="mx-auto mt-8 max-w-2xl rounded-full bg-white p-2 shadow-card">
+          <div className="flex items-center gap-2 rounded-full border border-mc-muted px-5 py-2">
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search your brand" className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none placeholder:text-mc-ink/38" />
+            <span className="grid h-10 w-10 place-items-center rounded-full bg-mc-orange text-lg font-bold text-white">⌕</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto mt-8 grid max-w-3xl gap-3 sm:grid-cols-3">
+        <button type="button" onClick={() => setFilter("all")} className={cx("rounded-[1rem] border px-5 py-4 text-sm font-bold shadow-card transition hover:-translate-y-0.5", filter === "all" ? "border-mc-orange bg-mc-orange text-white" : "border-mc-muted bg-white text-mc-ink")}>
+          All Brand
+        </button>
+        <button type="button" onClick={() => setFilter("street")} className={cx("rounded-[1rem] border px-5 py-4 text-sm font-bold shadow-card transition hover:-translate-y-0.5", filter === "street" ? "border-mc-orange bg-mc-orange text-white" : "border-mc-muted bg-white text-mc-ink")}>
+          Street Brand
+        </button>
+        <button type="button" onClick={onOther} className={cx("rounded-[1rem] border px-5 py-4 text-sm font-bold shadow-card transition hover:-translate-y-0.5", customBrand ? "border-mc-orange bg-mc-orange text-white" : "border-mc-muted bg-white text-mc-ink")}>
+          <span className="inline-grid h-6 w-6 place-items-center rounded-full bg-current/10 text-base">+</span>{" "}
+          {customBrand || "Other Brands"}
+          <span className="mt-1 block text-[11px] font-semibold opacity-70">Specify your brand here</span>
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="mt-12 grid place-items-center rounded-[1.4rem] bg-white p-10 shadow-card">
+          <div className="h-9 w-9 animate-spin rounded-full border-4 border-mc-orange border-t-transparent" />
+          <p className="mt-4 text-sm font-semibold text-mc-ink/60">Loading brands</p>
+        </div>
+      ) : null}
+
+      {!loading && filtered.length > 0 ? (
+        <div className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {filtered.map((brand) => (
+            <button key={brand.id} type="button" onClick={() => onSelect(brand)} className={cx("min-h-28 rounded-[1rem] border px-4 py-4 text-center font-display text-xl shadow-card transition hover:-translate-y-0.5", selectedBrand?.id === brand.id ? "border-mc-orange bg-mc-orange text-white ring-2 ring-mc-orange ring-offset-2" : "border-white bg-white text-mc-ink hover:border-mc-orange")}>
+              <span className="block">{brand.name}</span>
+              <span className={cx("mt-2 block text-xs font-bold", selectedBrand?.id === brand.id ? "text-white/80" : "text-mc-orange")}>{priceText(brand.price)}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {!loading && filtered.length === 0 ? (
+        <div className="mx-auto mt-10 max-w-xl rounded-[1.4rem] bg-white p-8 text-center shadow-card">
+          <h3 className="text-xl font-bold">Brand not found</h3>
+          <p className="mt-2 text-sm leading-6 text-mc-ink/60">Add this as an other brand and our team will review it manually.</p>
+          <button type="button" onClick={onOther} className="mt-5 rounded-full bg-mc-orange px-6 py-3 text-sm font-bold text-white shadow-orange hover:bg-mc-orange-dark">
+            Add Other Brand
+          </button>
+        </div>
+      ) : null}
+
+      <div className="mt-10 flex justify-center">
+        <button type="button" onClick={onNext} disabled={(!selectedBrand && !customBrand) || loading} className="rounded-full bg-mc-orange px-10 py-4 text-sm font-bold text-white shadow-orange hover:bg-mc-orange-dark disabled:opacity-55">
+          Continue
+        </button>
+        {unavailable ? (
+          <button type="button" onClick={onRetry} className="ml-3 rounded-full border border-mc-muted bg-white px-6 py-4 text-sm font-bold text-mc-ink hover:bg-mc-soft">
+            Retry API
+          </button>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function CategoryStep({ selectedCategory, onSelect, onBack, onNext }: { selectedCategory: string; onSelect: (category: string) => void; onBack: () => void; onNext: () => void }) {
+  return (
+    <section>
+      <div className="mx-auto max-w-3xl text-center">
+        <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full bg-mc-orange font-auth text-3xl text-white">1</div>
+        <p className="font-auth text-2xl text-mc-orange">Step 1</p>
+        <h2 className="mt-3 font-auth text-4xl leading-tight sm:text-6xl">Tell us about your item</h2>
+      </div>
+      <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        {categories.map((category) => (
+          <button key={category.title} type="button" onClick={() => onSelect(category.title)} className={cx("group overflow-hidden rounded-[1.3rem] bg-white p-3 text-left shadow-card transition hover:-translate-y-1", selectedCategory === category.title && "ring-2 ring-mc-orange ring-offset-2")}>
+            <div className="relative aspect-square overflow-hidden rounded-[1rem] bg-figma-panel">
+              <Image src={category.image} alt={category.alt} fill sizes="(min-width: 1024px) 18vw, 42vw" className="object-contain p-4 transition duration-500 group-hover:scale-105" />
+            </div>
+            <p className="mt-3 text-center font-auth text-xl">{category.title}</p>
+          </button>
+        ))}
+      </div>
+      <StepActions onBack={onBack} onNext={onNext} nextDisabled={!selectedCategory} nextLabel="Submit" />
+    </section>
+  );
+}
+
+function NfcStep({ brandName, selectedCategory, nfcMode, onSelect, onBack, onNext }: { brandName: string; selectedCategory: string; nfcMode: NfcMode; onSelect: (mode: NfcMode) => void; onBack: () => void; onNext: () => void }) {
+  return (
+    <section>
+      <div className="mx-auto max-w-3xl text-center">
+        <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full bg-mc-orange font-auth text-3xl text-white">2</div>
+        <p className="font-auth text-2xl text-mc-orange">Step 2</p>
+        <h2 className="mt-3 font-auth text-4xl leading-tight sm:text-6xl">NFC microchip</h2>
+        <p className="mt-3 text-sm text-mc-ink/60">{brandName} · {selectedCategory}</p>
+      </div>
+      <div className="mt-10 grid gap-5 lg:grid-cols-2">
+        <button type="button" onClick={() => onSelect("with-nfc")} className={cx("rounded-[1.6rem] bg-white p-6 text-left shadow-card transition hover:-translate-y-1", nfcMode === "with-nfc" && "ring-2 ring-mc-orange ring-offset-2")}>
+          <span className="grid h-10 w-10 place-items-center rounded-full bg-mc-orange text-sm font-bold text-white">1</span>
+          <h3 className="mt-4 text-2xl font-bold">For items with visible NFC chips</h3>
+          <p className="mt-3 text-sm leading-6 text-mc-ink/60">Scan the QR code using the NFC microchip scanner, then upload the required photos.</p>
+          <QrPanel />
+        </button>
+        <button type="button" onClick={() => onSelect("without-nfc")} className={cx("rounded-[1.6rem] bg-white p-6 text-left shadow-card transition hover:-translate-y-1", nfcMode === "without-nfc" && "ring-2 ring-mc-orange ring-offset-2")}>
+          <span className="grid h-10 w-10 place-items-center rounded-full bg-mc-ink text-sm font-bold text-white">2</span>
+          <h3 className="mt-4 text-2xl font-bold">My item has no NFC microchip</h3>
+          <p className="mt-3 text-sm leading-6 text-mc-ink/60">Continue directly to photo upload. Required examples will guide each angle one by one.</p>
+          <div className="mt-6 grid gap-3 sm:grid-cols-3">
+            {checkoutPhotoSlots.slice(0, 6).map((field) => (
+              <PhotoExample key={field.key} field={field} />
+            ))}
+          </div>
+        </button>
+      </div>
+      <StepActions onBack={onBack} onNext={onNext} nextDisabled={!nfcMode} />
+    </section>
+  );
+}
+
+function UploadStep({ brandName, selectedCategory, nfcMode, photos, loading, canSubmit, onBack, onPhotoChange, onSubmit }: { brandName: string; selectedCategory: string; nfcMode: NfcMode; photos: Record<string, File | null>; loading: boolean; canSubmit: boolean; onBack: () => void; onPhotoChange: (key: string, file: File | null) => void; onSubmit: () => void }) {
+  if (!brandName || !selectedCategory || !nfcMode) {
+    return <BlockedStep title="Photos not available" message="Complete brand, category, and NFC selection before uploading photos." />;
+  }
+
+  return (
+    <section>
+      <div className="mx-auto max-w-3xl text-center">
+        <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full bg-mc-orange font-auth text-3xl text-white">3</div>
+        <p className="font-auth text-2xl text-mc-orange">Step 3</p>
+        <h2 className="mt-3 font-auth text-4xl leading-tight sm:text-6xl">Upload the photos of your item one by one</h2>
+        <p className="mt-3 text-sm text-mc-ink/60">{brandName} · {selectedCategory} · {nfcMode === "with-nfc" ? "Visible NFC chips" : "No NFC chips"}</p>
+      </div>
+      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {checkoutPhotoSlots.map((field) => (
+          <article key={field.key} className="rounded-[1.3rem] bg-white p-4 shadow-card">
+            <div className="relative aspect-[4/3] overflow-hidden rounded-[1rem] bg-figma-panel">
+              <Image src={field.image} alt={field.label} fill sizes="(min-width: 1024px) 24vw, 80vw" className="object-cover" />
+              <span className="absolute left-3 top-3 rounded-full bg-mc-ink px-3 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-white">Photo example</span>
+            </div>
+            <div className="mt-4 flex items-start justify-between gap-3">
               <div>
-                <label htmlFor="co-email" className="block text-sm font-semibold text-mc-ink">Email</label>
-                <input
-                  id="co-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="mt-1 w-full rounded-full border border-mc-muted px-4 py-3 text-sm outline-none placeholder:text-mc-ink/38 focus:border-mc-orange focus:ring-2 focus:ring-mc-orange/30"
-                  placeholder="your@email.com"
-                />
+                <h3 className="text-base font-bold">{field.label}</h3>
+                <p className="mt-1 text-xs leading-5 text-mc-ink/58">{field.description}</p>
               </div>
-              <div>
-                <label htmlFor="co-pass" className="block text-sm font-semibold text-mc-ink">Password</label>
-                <input
-                  id="co-pass"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="mt-1 w-full rounded-full border border-mc-muted px-4 py-3 text-sm outline-none placeholder:text-mc-ink/38 focus:border-mc-orange focus:ring-2 focus:ring-mc-orange/30"
-                  placeholder="Enter your password"
-                />
-              </div>
-              {loginErr && <p className="text-sm text-red-600">{loginErr}</p>}
-              <button
-                type="submit"
-                className="w-full rounded-full bg-mc-orange px-6 py-3 text-sm font-bold text-white shadow-orange transition hover:bg-mc-orange-dark"
-              >
-                Sign In
-              </button>
-            </form>
-          </div>
-        )}
-
-        {/* Step: Brand */}
-        {step === "brand" && (
-          <div>
-            <div className="mb-8 text-center">
-              <p className="text-xs font-bold uppercase tracking-[0.28em] text-mc-orange">Step 2</p>
-              <h2 className="mt-2 text-3xl font-semibold">Select Your Brand</h2>
-              <p className="mt-2 text-sm text-mc-ink/60">Choose the brand of your item to see the authentication price</p>
+              {field.required ? <span className="rounded-full bg-mc-orange/10 px-2 py-1 text-[10px] font-bold uppercase text-mc-orange-dark">Required</span> : null}
             </div>
+            <label className="mt-4 block cursor-pointer rounded-full border border-dashed border-mc-orange/45 bg-mc-orange/5 px-4 py-3 text-center text-sm font-bold text-mc-orange hover:bg-mc-orange/10">
+              <input type="file" accept="image/*" onChange={(event) => onPhotoChange(field.key, event.target.files?.[0] || null)} className="sr-only" />
+              {photos[field.key]?.name ? photos[field.key]?.name.slice(0, 34) : "Upload photo"}
+            </label>
+          </article>
+        ))}
+      </div>
+      <StepActions onBack={onBack} onNext={onSubmit} nextDisabled={loading || !canSubmit} nextLabel={loading ? "Submitting" : "Submit"} />
+    </section>
+  );
+}
 
-            {brandsLoading && (
-              <div className="flex items-center justify-center py-12">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-mc-orange border-t-transparent" />
-                <span className="ml-3 text-sm text-mc-ink/60">Loading brands...</span>
+function PaymentStep({ brandName, requestId, amount, loading, onBack, onFakePayment, onCreateOrder, onApprove, onPaymentUnavailable }: { brandName: string; requestId: string | null; amount: string; loading: boolean; onBack: () => void; onFakePayment: () => void; onCreateOrder: () => Promise<string>; onApprove: (data: { orderID: string }) => Promise<void>; onPaymentUnavailable: (message: string) => void }) {
+  if (!brandName || !requestId) {
+    return <BlockedStep title="Payment not available" message="Upload photos successfully before payment is available." />;
+  }
+
+  return (
+    <section className="mx-auto max-w-6xl">
+      <div className="grid gap-0 overflow-hidden rounded-[2rem] bg-white shadow-auth-panel lg:grid-cols-[0.9fr_1.1fr] lg:rounded-[50px]">
+        <div className="relative min-h-[460px] overflow-hidden bg-figma-rate p-6 text-white lg:rounded-l-[50px]">
+          <Image src={figma.creditCard} alt="" fill sizes="(min-width: 1024px) 42vw, 90vw" className="object-contain object-left-bottom opacity-95" />
+          <div className="absolute inset-0 bg-gradient-to-r from-mc-ink/70 via-mc-ink/20 to-transparent" />
+          <div className="relative max-w-sm">
+            <p className="font-auth text-xl text-mc-orange">{brandName}</p>
+            <h2 className="mt-3 font-auth text-5xl leading-none">Payment Details</h2>
+            <p className="mt-4 text-sm leading-6 text-white/72">Choose an available payment method to complete your authentication request.</p>
+          </div>
+        </div>
+        <div className="self-center p-5 lg:p-8">
+          <div className="grid grid-cols-3 gap-3">
+            {["Card", "Apple Pay", "PayPal"].map((method) => (
+              <div key={method} className="rounded-[1rem] border border-mc-muted bg-white px-3 py-4 text-center text-xs font-bold text-mc-ink shadow-card">
+                {method}
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 rounded-[1.3rem] bg-mc-soft p-6 shadow-auth-google">
+            <div className="flex items-center justify-between border-b border-mc-muted pb-4">
+              <p className="text-sm font-bold text-mc-ink/55">Total Amount</p>
+              <p className="text-4xl font-bold text-mc-orange">{amount}</p>
+            </div>
+            <dl className="mt-5 grid gap-3 text-sm">
+              <DetailRow label="Service" value={`${brandName} authentication`} />
+              <DetailRow label="Reference" value={requestId} />
+              <DetailRow label="Currency" value="USD" />
+            </dl>
+            {PAYMENT_MODE === "fake" ? (
+              <button type="button" onClick={onFakePayment} disabled={loading} className="mt-6 h-[56px] w-full rounded-[20px] bg-black px-6 font-auth text-2xl text-white shadow-auth-input hover:bg-mc-brown disabled:opacity-55">
+                {loading ? "Processing" : `Pay ${amount} Now`}
+              </button>
+            ) : PAYPAL_CLIENT_ID ? (
+              <div className="mt-6">
+                <PayPalScriptProvider options={{ clientId: PAYPAL_CLIENT_ID, currency: "USD", intent: "capture" }}>
+                  <PayPalButtons
+                    style={{ layout: "vertical", color: "gold", shape: "pill", label: "pay" }}
+                    createOrder={onCreateOrder}
+                    onApprove={onApprove}
+                    onError={() => onPaymentUnavailable("Payment is unavailable right now.")}
+                  />
+                </PayPalScriptProvider>
+              </div>
+            ) : (
+              <div className="mt-6 rounded-[1rem] border border-mc-muted bg-white p-5 text-center">
+                <p className="text-sm font-bold">Payment not available</p>
+                <p className="mt-1 text-xs leading-5 text-mc-ink/55">Please try again later or contact support.</p>
               </div>
             )}
-
-            {!brandsLoading && brands.length === 0 && !serviceError && (
-              <div className="rounded-[1.4rem] border-2 border-dashed border-mc-muted bg-white p-8 text-center">
-                <p className="text-sm font-semibold text-mc-ink/60">No brands available</p>
-                <p className="mt-1 text-xs text-mc-ink/40">The brand service may be unavailable</p>
-                <button
-                  onClick={() => { setBrands([]); setServiceError(null); }}
-                  className="mt-4 rounded-full bg-mc-orange px-6 py-2 text-sm font-bold text-white shadow-orange transition hover:bg-mc-orange-dark"
-                >
-                  Retry
-                </button>
-              </div>
-            )}
-
-            {selectedBrand && (
-              <div className="mb-6 rounded-[1.4rem] bg-mc-orange/10 p-4 text-center">
-                <p className="text-sm text-mc-ink/60">Selected: <span className="font-bold text-mc-ink">{selectedBrand.name}</span></p>
-                <p className="text-2xl font-bold text-mc-orange">${selectedBrand.price}</p>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {brands.map((brand) => (
-                <button
-                  key={brand.id}
-                  onClick={() => handleSelectBrand(brand)}
-                  className={`rounded-[1rem] px-4 py-4 text-center text-sm font-bold text-white shadow-orange transition hover:-translate-y-0.5 ${
-                    selectedBrand?.id === brand.id
-                      ? "ring-2 ring-mc-orange ring-offset-2 bg-gradient-to-b from-[#ffbe62] to-mc-orange-dark"
-                      : "bg-gradient-to-b from-[#ffae42] to-mc-orange hover:from-[#ffbe62] hover:to-mc-orange-dark"
-                  }`}
-                >
-                  <div>{brand.name}</div>
-                  <div className="mt-1 text-xs font-normal text-white/80">${brand.price}</div>
-                </button>
-              ))}
-            </div>
-
-            <div className="mt-8 text-center">
-              <button
-                disabled={!canProceedToUpload}
-                onClick={handleProceedToUpload}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-mc-orange px-8 py-3 text-sm font-bold text-white shadow-orange transition hover:-translate-y-0.5 hover:bg-mc-orange-dark disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Continue to Upload
-              </button>
-            </div>
-
-            {error && !serviceError && <p className="mt-4 text-center text-sm text-red-600">{error}</p>}
           </div>
-        )}
+          <button type="button" onClick={onBack} className="mt-5 rounded-full border border-mc-muted bg-white px-6 py-3 text-sm font-bold text-mc-ink hover:bg-mc-soft">
+            Back to Upload
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
 
-        {/* Step: Upload */}
-        {step === "upload" && (
-          <div>
-            <div className="mb-8 text-center">
-              <p className="text-xs font-bold uppercase tracking-[0.28em] text-mc-orange">Step 3</p>
-              <h2 className="mt-2 text-3xl font-semibold">Upload Photos</h2>
-              <p className="mt-2 text-sm text-mc-ink/60">
-                Upload clear photos of your {selectedBrand?.name || "item"}
-              </p>
-            </div>
+function DoneStep({ requestId, brandName, selectedCategory, amount }: { requestId: string | null; brandName: string; selectedCategory: string; amount: string }) {
+  const subtotal = amountNumber(amount);
+  const shipping = 0;
+  const tax = Number((subtotal * 0.095).toFixed(2));
+  const total = subtotal + shipping + tax;
+  const orderNumber = requestId ? requestId.slice(-6).toUpperCase().padStart(6, "0") : "000001";
+  const trackingNumber = requestId ? requestId.replace(/[^0-9]/g, "").slice(-9).padStart(9, "0") : "447164523";
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              {PHOTO_FIELDS.map(({ key, label, desc }) => (
-                <div key={key} className="rounded-[1.2rem] bg-white p-4 shadow-card">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-bold">{label}</p>
-                    {["front", "back", "interior", "logo"].includes(key) && (
-                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-600">Required</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-mc-ink/50">{desc}</p>
-                  <label className="mt-3 block cursor-pointer">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handlePhotoChange(key, e.target.files?.[0] || null)}
-                      className="hidden"
-                    />
-                    <span className="block w-full rounded-full border border-dashed border-mc-orange/40 bg-mc-orange/5 px-4 py-3 text-center text-sm font-semibold text-mc-orange transition hover:bg-mc-orange/10">
-                      {photos[key] ? photos[key]!.name.slice(0, 30) : "Select image"}
-                    </span>
-                  </label>
-                </div>
-              ))}
+  return (
+    <section className="mx-auto max-w-6xl">
+      <div className="rounded-[2rem] bg-white p-5 shadow-auth-panel lg:rounded-[50px] lg:p-8">
+        <div className="flex flex-col gap-4 border-b border-mc-muted pb-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <span className="grid h-16 w-16 place-items-center rounded-full bg-mc-orange/10 text-3xl font-bold text-mc-orange">✓</span>
+            <div>
+              <p className="text-sm font-bold text-mc-ink/45">Order #{orderNumber}</p>
+              <h2 className="font-auth text-5xl leading-none text-mc-ink">Payment Success</h2>
             </div>
-
-            <div className="mt-8 flex items-center justify-between">
-              <button
-                onClick={() => setStep("brand")}
-                className="rounded-full border border-mc-muted px-6 py-3 text-sm font-semibold text-mc-ink transition hover:bg-mc-cream"
-              >
-                Back
-              </button>
-              <button
-                onClick={handleUpload}
-                disabled={loading || !hasRequiredPhotos()}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-mc-orange px-8 py-3 text-sm font-bold text-white shadow-orange transition hover:-translate-y-0.5 hover:bg-mc-orange-dark disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? "Uploading..." : "Submit & Continue to Payment"}
-              </button>
-            </div>
-            {error && !serviceError && <p className="mt-4 text-center text-sm text-red-600">{error}</p>}
           </div>
-        )}
-
-        {/* Step: Payment */}
-        {step === "payment" && selectedBrand && (
-          <div>
-            <div className="mb-8 text-center">
-              <p className="text-xs font-bold uppercase tracking-[0.28em] text-mc-orange">Step 4</p>
-              <h2 className="mt-2 text-3xl font-semibold">Complete Payment</h2>
-              <p className="mt-2 text-sm text-mc-ink/60">
-                {selectedBrand.name} authentication &mdash; <span className="font-bold">${selectedBrand.price}</span>
-              </p>
+          <Link href="/" transitionTypes={["nav-back"]} className="inline-flex justify-center rounded-full bg-mc-orange px-8 py-3 text-sm font-bold text-white shadow-orange hover:bg-mc-orange-dark">
+            Back to Home
+          </Link>
+        </div>
+        <div className="mt-8 rounded-[1.3rem] bg-mc-soft p-5 shadow-auth-google">
+          <h3 className="font-auth text-4xl">Your Order</h3>
+          <div className="mt-5 grid gap-5 border-b border-mc-muted pb-6 lg:grid-cols-[140px_1fr_auto] lg:items-center">
+            <div className="relative aspect-square overflow-hidden rounded-[1rem] bg-white">
+              <Image src={figma.ctaBag} alt="" fill sizes="140px" className="object-contain p-3" />
             </div>
-
-            <div className="rounded-[1.6rem] bg-white p-6 shadow-card">
-              <div className="rounded-[1.25rem] bg-gradient-to-r from-mc-orange to-[#ffb15f] p-5 text-center text-white">
-                <p className="text-sm font-bold uppercase tracking-[0.16em]">Authentication Fee</p>
-                <p className="mt-2 text-4xl font-bold">${selectedBrand.price}</p>
-                <p className="mt-1 text-xs text-white/80">Request ID: {requestId}</p>
-              </div>
-
-              {PAYPAL_CLIENT_ID ? (
-                <div className="mt-6">
-                  <PayPalScriptProvider options={{ clientId: PAYPAL_CLIENT_ID, currency: "USD", intent: "capture" }}>
-                    <PayPalButtons
-                      style={{ layout: "vertical", color: "gold", shape: "pill", label: "pay" }}
-                      createOrder={handlePayPalCreateOrder}
-                      onApprove={handlePayPalApprove}
-                      onError={(err) => {
-                        setServiceError("payment-service");
-                        setError(err instanceof Error ? err.message : "PayPal error");
-                      }}
-                    />
-                  </PayPalScriptProvider>
-                </div>
-              ) : (
-                <div className="mt-6 rounded-[1rem] border-2 border-dashed border-mc-muted p-6 text-center">
-                  <p className="text-sm font-semibold text-mc-ink/60">PayPal integration pending</p>
-                  <p className="mt-1 text-xs text-mc-ink/40">Set NEXT_PUBLIC_PAYPAL_CLIENT_ID in .env.local to enable checkout</p>
-                </div>
-              )}
+            <div>
+              <p className="text-xl font-bold">{selectedCategory || "Item"} Authenticate</p>
+              <p className="mt-2 text-sm text-mc-ink/62">Brand: {brandName || "Not available"}</p>
+              <p className="mt-1 text-sm text-mc-ink/62">Moda Track Number: {trackingNumber}</p>
             </div>
-
-            <div className="mt-4 text-center">
-              <button
-                onClick={() => setStep("upload")}
-                className="rounded-full border border-mc-muted px-6 py-3 text-sm font-semibold text-mc-ink transition hover:bg-mc-cream"
-              >
-                Back to Upload
-              </button>
-            </div>
-            {error && !serviceError && <p className="mt-4 text-center text-sm text-red-600">{error}</p>}
+            <p className="text-2xl font-bold text-mc-orange">{money(subtotal)}</p>
           </div>
-        )}
+          <dl className="mt-5 grid gap-3 text-sm">
+            <DetailRow label="Subtotal" value={money(subtotal)} />
+            <DetailRow label="Shipping" value={money(shipping)} />
+            <DetailRow label="Tax" value={money(tax)} />
+            <DetailRow label="Total" value={`${money(total)} USD`} strong />
+            {requestId ? <DetailRow label="Request ID" value={requestId} /> : null}
+          </dl>
+        </div>
+      </div>
+    </section>
+  );
+}
 
-        {/* Step: Done */}
-        {step === "done" && (
-          <div className="rounded-[1.6rem] bg-white p-10 text-center shadow-card">
-            <div className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-green-100 text-3xl text-green-600">&#10003;</div>
-            <h2 className="mt-6 text-2xl font-semibold">Payment Complete!</h2>
-            <p className="mt-3 text-sm text-mc-ink/60">
-              Your authentication request has been submitted and payment confirmed.
-              Our experts will review your item and you&apos;ll receive results soon.
-            </p>
-            <p className="mt-4 text-xs text-mc-ink/40">Request ID: {requestId}</p>
-            <Link
-              href="/"
-              className="mt-8 inline-flex items-center justify-center gap-2 rounded-full bg-mc-orange px-8 py-3 text-sm font-bold text-white shadow-orange transition hover:-translate-y-0.5 hover:bg-mc-orange-dark"
-            >
-              Back to Home
-            </Link>
-          </div>
-        )}
-      </main>
+function DetailRow({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <dt className={cx("text-mc-ink/58", strong && "text-base font-bold text-mc-ink")}>{label}</dt>
+      <dd className={cx("text-right font-bold text-mc-ink", strong && "text-xl text-mc-orange")}>{value}</dd>
+    </div>
+  );
+}
+
+function StepActions({ onBack, onNext, nextDisabled, nextLabel = "Continue" }: { onBack: () => void; onNext: () => void; nextDisabled: boolean; nextLabel?: string }) {
+  return (
+    <div className="mt-10 flex justify-between gap-3">
+      <button type="button" onClick={onBack} className="rounded-full bg-mc-nav-gray px-6 py-3 text-sm font-bold text-mc-ink hover:bg-mc-muted">
+        Back
+      </button>
+      <button type="button" onClick={onNext} disabled={nextDisabled} className="rounded-full bg-black px-8 py-3 text-sm font-bold text-white shadow-auth-google hover:bg-mc-brown disabled:opacity-55">
+        {nextLabel}
+      </button>
+    </div>
+  );
+}
+
+function QrPanel() {
+  return (
+    <div className="mt-6 grid gap-4 rounded-[1.4rem] bg-figma-rate p-5 text-white sm:grid-cols-[0.85fr_1fr]">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-mc-orange">NFC scanner</p>
+        <p className="mt-3 text-sm leading-6 text-white/70">Open the scanner, tap the microchip, then return here to submit photos.</p>
+      </div>
+      <div className="mx-auto grid h-36 w-36 grid-cols-9 gap-1 rounded-[1rem] bg-white p-3">
+        {Array.from({ length: 81 }).map((_, index) => (
+          <span key={index} className={cx("rounded-[1px]", (index * 7 + index) % 5 < 2 ? "bg-mc-ink" : "bg-white")} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PhotoExample({ field }: { field: (typeof checkoutPhotoSlots)[number] }) {
+  return (
+    <div className="rounded-[1rem] bg-mc-cream p-2">
+      <div className="relative aspect-square overflow-hidden rounded-[0.8rem] bg-figma-panel">
+        <Image src={field.image} alt={field.label} fill sizes="160px" className="object-cover" />
+      </div>
+      <p className="mt-2 text-xs font-bold">{field.label}</p>
+    </div>
+  );
+}
+
+function BlockedStep({ title, message }: { title: string; message: string }) {
+  return (
+    <section className="mx-auto max-w-xl rounded-[1.4rem] border border-mc-muted bg-white p-8 text-center shadow-card">
+      <h2 className="text-2xl font-bold">{title}</h2>
+      <p className="mt-2 text-sm leading-6 text-mc-ink/60">{message}</p>
+      <Link href="/checkout" transitionTypes={["nav-back"]} className="mt-6 inline-flex rounded-full bg-mc-orange px-6 py-3 text-sm font-bold text-white shadow-orange">
+        Restart checkout
+      </Link>
+    </section>
+  );
+}
+
+function OtherBrandDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: (brand: string) => void }) {
+  const [value, setValue] = useState("");
+
+  return (
+    <div className="fixed inset-0 z-[80] grid place-items-center bg-mc-ink/45 px-4 backdrop-blur-sm">
+      <form onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit(value);
+      }} className="w-full max-w-2xl rounded-[2rem] bg-white p-6 shadow-auth-panel lg:rounded-[50px] lg:p-10">
+        <h2 className="font-auth text-5xl leading-tight">Tell me your brand</h2>
+        <p className="mt-2 text-sm leading-6 text-mc-ink/60">Enter the exact brand name and our team will route it for review.</p>
+        <input value={value} onChange={(event) => setValue(event.target.value)} autoFocus placeholder="Other brand name" className="mt-5 h-[56px] w-full rounded-full bg-white px-6 text-sm shadow-auth-input outline-none ring-1 ring-black/5 focus:ring-2 focus:ring-mc-orange/30" />
+        <div className="mt-6 flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="rounded-full border border-mc-muted bg-white px-5 py-2.5 text-sm font-bold text-mc-ink hover:bg-mc-soft">
+            Cancel
+          </button>
+          <button type="submit" disabled={!value.trim()} className="rounded-full bg-mc-orange px-5 py-2.5 text-sm font-bold text-white shadow-orange hover:bg-mc-orange-dark disabled:opacity-55">
+            Use brand
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function LeaveDialog({ onStay, onLeave }: { onStay: () => void; onLeave: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-mc-ink/45 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-[2rem] bg-white p-6 text-center shadow-auth-panel lg:rounded-[50px]">
+        <div className="mx-auto grid h-20 w-20 place-items-center rounded-full border-2 border-mc-ink text-4xl font-bold">!</div>
+        <h2 className="mt-5 font-auth text-4xl">You almost finished.</h2>
+        <p className="mt-2 text-sm leading-6 text-mc-ink/60">Are you sure you want to leave this page?</p>
+        <div className="mt-6 flex justify-center gap-3">
+          <button type="button" onClick={onLeave} className="rounded-full bg-mc-orange px-6 py-3 text-sm font-bold text-white shadow-orange hover:bg-mc-orange-dark">
+            Leave
+          </button>
+          <button type="button" onClick={onStay} className="rounded-full border border-mc-muted bg-white px-6 py-3 text-sm font-bold text-mc-ink hover:bg-mc-soft">
+            Stay
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

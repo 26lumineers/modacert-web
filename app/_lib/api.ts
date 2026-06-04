@@ -1,12 +1,87 @@
 import axios from "axios";
+import { clearAuth } from "./auth";
+import { config } from "./config";
 
-const userServiceUrl =
-  process.env.NEXT_PUBLIC_USER_SERVICE_URL || "http://localhost:3000";
-const paymentServiceUrl =
-  process.env.NEXT_PUBLIC_PAYMENT_SERVICE_URL || "http://localhost:3002";
+const userApi = axios.create({ baseURL: `${config.services.user}${config.apiPrefix}` });
+const paymentApi = axios.create({ baseURL: `${config.services.payment}${config.apiPrefix}` });
 
-const userApi = axios.create({ baseURL: `${userServiceUrl}/api/v1` });
-const paymentApi = axios.create({ baseURL: `${paymentServiceUrl}/api/v1` });
+type LoadingListener = (active: boolean) => void;
+
+let activeRequests = 0;
+let listeners: LoadingListener[] = [];
+
+function notifyListeners() {
+  const active = activeRequests > 0;
+  listeners.forEach((fn) => fn(active));
+}
+
+export function onApiLoadingChange(fn: LoadingListener): () => void {
+  listeners.push(fn);
+  return () => {
+    listeners = listeners.filter((l) => l !== fn);
+  };
+}
+
+function hasUnauthorizedMarker(value: unknown): boolean {
+  return typeof value === "string" && value.toLowerCase() === "unauthorized";
+}
+
+function isUnauthorizedError(error: unknown): boolean {
+  if (!axios.isAxiosError(error)) return false;
+  const url = error.config?.url || "";
+  if (url.includes("/auth/login")) return false;
+  const status = error.response?.status;
+  if (status === 401) return true;
+  const data = error.response?.data;
+  if (
+    hasUnauthorizedMarker(data?.code) ||
+    hasUnauthorizedMarker(data?.status) ||
+    hasUnauthorizedMarker(data?.error?.code)
+  ) {
+    return true;
+  }
+  const msg: string = (
+    data?.error?.message ||
+    data?.message ||
+    data?.error ||
+    ""
+  ).toLowerCase();
+  return (
+    msg === "unauthorized" ||
+    msg.includes("token expired") ||
+    msg.includes("jwt expired") ||
+    msg.includes("token invalid")
+  );
+}
+
+function redirectToSignIn() {
+  if (typeof window === "undefined") return;
+  clearAuth();
+  setAuthToken(null);
+  if (window.location.pathname === "/signin") return;
+  window.location.href = "/signin";
+}
+
+[userApi, paymentApi].forEach((api) => {
+  api.interceptors.request.use((config) => {
+    activeRequests++;
+    notifyListeners();
+    return config;
+  });
+  api.interceptors.response.use(
+    (res) => {
+      activeRequests = Math.max(0, activeRequests - 1);
+      notifyListeners();
+      return res;
+    },
+    (error) => {
+      activeRequests = Math.max(0, activeRequests - 1);
+      notifyListeners();
+      if (isUnauthorizedError(error)) redirectToSignIn();
+      return Promise.reject(error);
+    },
+  );
+});
 
 export function setAuthToken(token: string | null) {
   if (token) {
@@ -41,11 +116,22 @@ export interface LoginResponse {
   user: { id: string; fullName: string; email: string; role: string };
 }
 
+export interface RegisterPayload {
+  firstName: string;
+  lastName: string;
+  country: string;
+  countryCode: string;
+  phone: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+}
+
 export async function login(
   email: string,
   password: string
 ): Promise<LoginResponse> {
-  const { data } = await userApi.post("/auth/login", { email, password });
+  const { data } = await userApi.post(config.endpoints.auth.login, { email, password });
   const token =
     data?.data?.tokens?.accessToken || data?.accessToken || data?.token;
   const user = data?.data?.user || data?.user;
@@ -54,15 +140,35 @@ export async function login(
   return { accessToken: token, user };
 }
 
+export async function register(
+  payload: RegisterPayload
+): Promise<LoginResponse | { success: true }> {
+  const { data } = await userApi.post(config.endpoints.auth.register, payload);
+  const token =
+    data?.data?.tokens?.accessToken || data?.accessToken || data?.token;
+  const user = data?.data?.user || data?.user;
+
+  if (token && user) {
+    setAuthToken(token);
+    return { accessToken: token, user };
+  }
+
+  if (data?.success === false) {
+    throw new Error(data?.error?.message || data?.message || "Registration failed");
+  }
+
+  return { success: true };
+}
+
 export async function fetchBrands(): Promise<Brand[]> {
-  const { data } = await userApi.get("/brands");
+  const { data } = await userApi.get(config.endpoints.brands.list);
   const brands = data?.data ?? data;
   if (!Array.isArray(brands)) throw new Error("Invalid brands response");
   return brands;
 }
 
 export async function fetchBrandModels(brandId: string): Promise<Model[]> {
-  const { data } = await userApi.get(`/brands/${brandId}/models`);
+  const { data } = await userApi.get(config.endpoints.brands.models(brandId));
   const models = data?.data ?? data;
   if (!Array.isArray(models)) throw new Error("Invalid models response");
   return models;
@@ -70,7 +176,7 @@ export async function fetchBrandModels(brandId: string): Promise<Model[]> {
 
 export interface PresignResponse {
   requestId: string;
-  uploadUrls: Array<{ photoType: string; uploadUrl: string }>;
+  uploadUrls: Array<{ photoType: string; uploadUrl: string; key: string }>;
 }
 
 export async function requestPresignUrls(payload: {
@@ -80,7 +186,7 @@ export async function requestPresignUrls(payload: {
   contentTypes: Record<string, string>;
   nfcData?: string;
 }): Promise<PresignResponse> {
-  const { data } = await userApi.post("/upload/presign", payload);
+  const { data } = await userApi.post(config.endpoints.upload.presign, payload);
   if (!data?.success) throw new Error(data?.error?.message || "Presign failed");
   return data.data;
 }
@@ -89,17 +195,28 @@ export async function uploadToPresignedUrl(
   url: string,
   file: File
 ): Promise<void> {
-  await fetch(url, {
-    method: "PUT",
-    body: file,
-    headers: { "Content-Type": file.type || "image/jpeg" },
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "PUT",
+      body: file,
+      headers: { "Content-Type": file.type || "image/jpeg" },
+    });
+  } catch (error) {
+    throw new Error(error instanceof Error ? `Upload failed: ${error.message}` : "Upload failed");
+  }
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`Upload failed (${response.status}): ${body || response.statusText}`);
+  }
 }
 
 export async function confirmUpload(
-  requestId: string
+  requestId: string,
+  uploadedKeys?: Record<string, string>
 ): Promise<{ status: string }> {
-  const { data } = await userApi.post("/upload/confirm", { requestId });
+  const { data } = await userApi.post(config.endpoints.upload.confirm, { requestId, uploadedKeys });
   if (!data?.success) throw new Error(data?.error?.message || "Confirm failed");
   return data.data;
 }
@@ -110,13 +227,23 @@ export interface CreateOrderResponse {
   approvalUrl?: string;
 }
 
-export async function createPayPalOrder(payload: {
+export interface CreateOrderPayload {
   amount: string;
   currency?: string;
   referenceId: string;
-}): Promise<CreateOrderResponse> {
+  itemName?: string;
+  itemDescription?: string;
+  itemQuantity?: number;
+  itemPrice?: string;
+  returnUrl?: string;
+  cancelUrl?: string;
+}
+
+export async function createPayPalOrder(
+  payload: CreateOrderPayload
+): Promise<CreateOrderResponse> {
   const { data } = await paymentApi.post(
-    "/payments/paypal/create-order",
+    config.endpoints.payments.paypal.createOrder,
     payload
   );
   if (!data?.success)
@@ -125,13 +252,15 @@ export async function createPayPalOrder(payload: {
 }
 
 export async function capturePayPalOrder(payload: {
-  OrderId: string;
+  orderId: string;
   referenceId: string;
 }): Promise<{ status: string; paypalStatus: string }> {
   const { data } = await paymentApi.post(
-    "/payments/paypal/capture",
+    config.endpoints.payments.paypal.capture,
     payload
   );
   if (!data?.success) throw new Error(data?.error?.message || "Capture failed");
   return data.data;
 }
+
+export const PAYMENT_MODE = config.paymentMode;

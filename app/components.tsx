@@ -2,78 +2,102 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   categories,
+  figma,
   footerCategories,
   footerColumns,
   navItems,
-  nfcPhotoSlots,
-  nonNfcPhotoSlots,
+  rates,
+  socialLinks,
   steps,
   trustStats,
-  whyItems,
   type Category,
   type Rate,
-  type WhyItem,
-  type PhotoSlot,
 } from "./data";
 
-type ButtonTone = "dark" | "orange" | "light";
+type ButtonTone = "dark" | "orange" | "light" | "outline";
 
-function cx(...classes: Array<string | false | null | undefined>) {
+export function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
+}
+
+export const navHeaderClass = "sticky top-0 z-50 px-4 py-5 sm:px-8 lg:px-20";
+export const navPillClass =
+  "mx-auto grid h-[73px] max-w-[1265px] grid-cols-[1fr_auto_1fr] items-center rounded-full border border-white/45 bg-mc-nav-gray/95 px-5 shadow-[0_16px_38px_rgba(28,18,9,0.12)] backdrop-blur-xl sm:px-8";
+export const navMenuClass = "ml-auto hidden items-center gap-8 text-xs font-semibold text-black md:flex";
+export const navCtaClass = "rounded-full bg-black px-5 py-3 text-xs font-bold text-white shadow-[0_10px_22px_rgba(0,0,0,0.18)] transition hover:bg-mc-brown";
+
+export function NavMenuMark() {
+  return (
+    <span aria-hidden="true" className="flex h-10 w-10 items-center justify-start text-2xl leading-none text-black">
+      =
+    </span>
+  );
 }
 
 export function ArrowIcon({ className = "h-4 w-4" }: { className?: string }) {
   return (
-    <svg
-      aria-hidden="true"
-      className={className}
-      viewBox="0 0 16 16"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        d="M3 8H13M13 8L8.5 3.5M13 8L8.5 12.5"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.7"
-      />
+    <svg aria-hidden="true" className={className} viewBox="0 0 16 16" fill="none">
+      <path d="M3 8H13M13 8L8.5 3.5M13 8L8.5 12.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" />
     </svg>
   );
 }
 
-export function BrandMark({ light = false }: { light?: boolean }) {
+export function BrandMark({ light = false, compact = false }: { light?: boolean; compact?: boolean }) {
   return (
-    <Link href="/" className={cx("inline-flex items-center gap-2", light ? "text-white" : "text-mc-ink")}>
-      <span className="grid h-7 w-7 place-items-center rounded-full border border-current text-[11px] font-semibold">
-        M
+    <Link href="/" transitionTypes={["nav-back"]} className={cx("inline-flex items-center gap-2", light ? "text-white" : "text-mc-ink")}>
+      <span className={cx("relative shrink-0 overflow-hidden rounded-full", compact ? "h-7 w-7" : "h-9 w-9")}>
+        <Image src={figma.mark} alt="" fill sizes="36px" className="object-contain" />
       </span>
-      <span className="font-logo text-xl tracking-[0.2em] sm:text-2xl">MODACERT</span>
+      <span className={cx("font-logo tracking-[0.2em]", compact ? "text-lg" : "text-xl sm:text-2xl")}>MODACERT</span>
+    </Link>
+  );
+}
+
+export function NavBrandLink({ className = "" }: { className?: string }) {
+  return (
+    <Link href="/" transitionTypes={["nav-back"]} className={cx("inline-flex items-center gap-2 text-black", className)}>
+      <span className="relative h-[42px] w-[42px] sm:h-[54px] sm:w-[54px]">
+        <Image src={figma.mark} alt="" fill sizes="54px" className="object-contain" />
+      </span>
+      <span className="font-logo text-base tracking-[0.08em] sm:text-xl">MODACERT</span>
     </Link>
   );
 }
 
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-50 border-b border-black/8 bg-white/88 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-        <BrandMark />
-        <nav className="hidden items-center gap-7 text-xs font-semibold uppercase tracking-[0.18em] text-mc-ink/62 md:flex">
+    <header className={navHeaderClass} style={{ viewTransitionName: "site-header" }}>
+      <div className={navPillClass}>
+        <NavMenuMark />
+        <NavBrandLink />
+        <nav className={navMenuClass}>
           {navItems.map((item) => (
-            <Link key={item.href} href={item.href} className="transition hover:text-mc-orange">
+            <Link key={item.href} href={item.href} transitionTypes={["nav-forward"]} className="transition hover:text-mc-orange">
               {item.label}
             </Link>
           ))}
+          <span className="relative h-5 w-5">
+            <Image src={figma.cart} alt="" fill sizes="20px" className="object-contain" />
+          </span>
+          <Link href="/signin" transitionTypes={["nav-forward"]} className={navCtaClass}>
+            Sign In
+          </Link>
         </nav>
-        <Link
-          href="/authenticate"
-          className="inline-flex items-center gap-2 rounded-full bg-mc-orange px-5 py-2.5 text-xs font-bold uppercase tracking-[0.12em] text-white shadow-orange transition hover:-translate-y-0.5 hover:bg-mc-orange-dark"
-        >
-          Authenticate Now
-          <ArrowIcon />
-        </Link>
       </div>
     </header>
+  );
+}
+
+export function FloatingChatWidget() {
+  return (
+    <Link
+      href="/checkout"
+      transitionTypes={["nav-forward"]}
+      aria-label="Start authentication chat"
+      className="fixed bottom-5 right-5 z-[60] grid h-[74px] w-[74px] place-items-center rounded-[1.35rem] bg-mc-orange shadow-[0_18px_36px_rgba(244,122,19,0.38)] transition hover:-translate-y-1 hover:bg-mc-orange-dark focus:outline-none focus:ring-2 focus:ring-mc-orange focus:ring-offset-2 sm:bottom-7 sm:right-7 sm:h-[92px] sm:w-[92px]"
+    >
+      <Image src={figma.chat} alt="" width={92} height={92} sizes="(min-width: 640px) 92px, 74px" className="h-full w-full object-contain" />
+    </Link>
   );
 }
 
@@ -89,14 +113,16 @@ export function ButtonLink({
   className?: string;
 }) {
   const toneClass = {
-    dark: "bg-black text-white hover:bg-mc-brown shadow-soft",
+    dark: "bg-mc-ink text-white hover:bg-mc-brown shadow-soft",
     orange: "bg-mc-orange text-white hover:bg-mc-orange-dark shadow-orange",
     light: "bg-white text-mc-ink hover:bg-mc-cream shadow-soft",
+    outline: "border border-mc-muted bg-white/70 text-mc-ink hover:border-mc-orange hover:text-mc-orange",
   }[tone];
 
   return (
     <Link
       href={href}
+      transitionTypes={["nav-forward"]}
       className={cx(
         "inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-bold transition hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-mc-orange focus:ring-offset-2",
         toneClass,
@@ -134,13 +160,13 @@ export function SectionTitle({
 
 export function FlowSteps({ current }: { current: number }) {
   return (
-    <ol className="mx-auto flex max-w-2xl items-center justify-center gap-2 px-4">
+    <ol className="mx-auto flex max-w-3xl items-center justify-center gap-1 px-4 sm:gap-2">
       {steps.map((step, index) => {
         const isCurrent = index === current;
         const isPast = index < current;
 
         return (
-          <li key={step.href} className="flex items-center gap-2">
+          <li key={step.href} className="flex items-center gap-1 sm:gap-2">
             <Link
               href={step.href}
               aria-current={isCurrent ? "step" : undefined}
@@ -153,7 +179,7 @@ export function FlowSteps({ current }: { current: number }) {
             >
               {index + 1}
             </Link>
-            {index < steps.length - 1 ? <span className="h-px w-5 bg-mc-muted sm:w-10" /> : null}
+            {index < steps.length - 1 ? <span className="h-px w-4 bg-mc-muted sm:w-8" /> : null}
           </li>
         );
       })}
@@ -161,51 +187,65 @@ export function FlowSteps({ current }: { current: number }) {
   );
 }
 
-export function CategoryCard({ category }: { category: Category }) {
-  if (!category.active) {
-    return (
-      <div
-        aria-disabled="true"
-        className="group relative overflow-hidden rounded-[1.6rem] border border-mc-muted bg-white/70 p-3 opacity-55 grayscale"
-      >
-        <CategoryImage category={category} />
-        <div className="mt-4 flex items-center justify-between gap-3">
-          <h3 className="text-base font-bold text-mc-ink">{category.title}</h3>
-          <span className="rounded-full bg-mc-muted px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-mc-ink/54">
-            Coming soon
-          </span>
-        </div>
-      </div>
-    );
-  }
+export function RatingBanner() {
+  return (
+    <div className="mt-7 flex flex-wrap items-center gap-3 text-sm text-white">
+      <span className="font-bold">Excellent 4.9 out of 5</span>
+      <span className="relative h-5 w-16">
+        <Image src={figma.trustpilot} alt="Trustpilot" fill sizes="64px" className="object-contain" />
+      </span>
+    </div>
+  );
+}
+
+export function HeroCategoryStack() {
+  const visible = categories.slice(0, 5);
 
   return (
-    <Link
-      href="/rates"
-      className="group relative overflow-hidden rounded-[1.6rem] border border-mc-orange/20 bg-white p-3 shadow-card transition hover:-translate-y-1"
-    >
-      <CategoryImage category={category} />
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <h3 className="text-base font-bold text-mc-ink">{category.title}</h3>
-        <span className="rounded-full bg-mc-orange px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-white">
-          Authenticate
-        </span>
+    <div className="relative min-h-[430px] lg:min-h-[610px]">
+      {visible.map((category, index) => (
+        <FloatingCategoryCard key={category.title} category={category} index={index} />
+      ))}
+      <div className="absolute bottom-4 left-1/2 z-20 hidden -translate-x-1/2 lg:block">
+        <ButtonLink href="/checkout" tone="orange" className="px-6 py-2.5 text-xs">
+          Authenticate Now
+        </ButtonLink>
       </div>
+    </div>
+  );
+}
+
+function FloatingCategoryCard({ category, index }: { category: Category; index: number }) {
+  const positions = [
+    "left-[3%] top-[18%] w-[43%] z-20 lg:left-[0%] lg:top-[25%] lg:w-[32%]",
+    "left-[35%] top-[26%] w-[34%] z-10 lg:left-[27%] lg:top-[25%] lg:w-[25%]",
+    "right-[3%] top-[17%] w-[34%] z-0 lg:left-[48%] lg:right-auto lg:top-[25%] lg:w-[25%]",
+    "right-[13%] bottom-[3%] w-[31%] z-0 hidden sm:block lg:left-[67%] lg:right-auto lg:bottom-auto lg:top-[25%] lg:w-[23%]",
+    "right-[-4%] bottom-[12%] w-[28%] z-0 hidden lg:block lg:left-[84%] lg:right-auto lg:bottom-auto lg:top-[25%] lg:w-[22%]",
+  ];
+
+  return (
+    <Link href="/checkout" transitionTypes={["nav-forward"]} className={cx("absolute block rounded-[1.6rem] bg-white p-3 text-mc-ink shadow-figma-deep transition hover:-translate-y-1", positions[index])}>
+      {index === 0 ? <p className="text-xs font-bold text-mc-orange">40+ Brand Authenticate</p> : null}
+      <div className="relative mt-1 aspect-square overflow-hidden rounded-[1.1rem] bg-figma-panel">
+        <Image src={category.image} alt={category.alt} fill sizes="(min-width: 1024px) 22vw, 48vw" className="object-contain p-3" priority={index === 0} />
+      </div>
+      <p className="font-category text-center text-base font-bold leading-normal sm:text-lg">{category.title}</p>
     </Link>
   );
 }
 
-function CategoryImage({ category }: { category: Category }) {
+export function CategoryCard({ category }: { category: Category }) {
   return (
-    <div className="relative aspect-square overflow-hidden rounded-[1.2rem] bg-product p-5">
-      <Image
-        src={category.image}
-        alt={category.alt}
-        fill
-        sizes="(min-width: 1024px) 18vw, (min-width: 640px) 32vw, 82vw"
-        className="object-contain p-4 transition duration-500 group-hover:scale-105"
-      />
-    </div>
+    <Link href="/checkout" transitionTypes={["nav-forward"]} className="group relative overflow-hidden rounded-[1.4rem] bg-white p-4 shadow-card transition hover:-translate-y-1">
+      <div className="relative aspect-square rounded-[1.1rem] bg-figma-panel">
+        <Image src={category.image} alt={category.alt} fill sizes="(min-width: 1024px) 18vw, 42vw" className="object-contain p-5 transition duration-500 group-hover:scale-105" />
+      </div>
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <h3 className="text-base font-bold text-mc-ink">{category.title}</h3>
+        <span className="rounded-full bg-mc-orange px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-white">Authenticate</span>
+      </div>
+    </Link>
   );
 }
 
@@ -219,133 +259,186 @@ export function CategoryGrid() {
   );
 }
 
-export function RateCard({ rate }: { rate: Rate }) {
+export function HowItWorks() {
+  const stepsData = [
+    { num: "1", title: "Upload clear photos of your item", image: "/figma/step-bag.png" },
+    { num: "2", title: "Our experts verify it", image: "/figma/step-expert.png" },
+    { num: "3", title: "Get your certificate starting at 40 mins", image: "/figma/step-certificate.png" },
+  ];
+
   return (
-    <article
-      className={cx(
-        "relative overflow-hidden rounded-[1.8rem] border bg-white p-4 shadow-card",
-        rate.featured ? "border-mc-orange" : "border-mc-muted",
-      )}
-    >
-      {rate.featured ? (
-        <div className="absolute right-4 top-4 z-10 rounded-full bg-mc-orange px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white">
-          Popular
-        </div>
-      ) : null}
-      <div className="relative aspect-[4/5] overflow-hidden rounded-[1.35rem] bg-rate">
-        <Image
-          src={rate.image}
-          alt=""
-          fill
-          sizes="(min-width: 1024px) 24vw, 86vw"
-          className="object-contain p-6"
-        />
-        <div className="absolute inset-x-4 bottom-4 rounded-[1.1rem] bg-black/74 p-4 text-white backdrop-blur">
-          <p className="text-xs uppercase tracking-[0.16em] text-white/62">{rate.name}</p>
-          <p className="mt-1 text-4xl font-bold">{rate.price}</p>
-          <p className="mt-1 text-xs text-white/68">{rate.time}</p>
+    <section className="px-4 py-16 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="grid gap-8 lg:grid-cols-[0.34fr_0.66fr] lg:items-start">
+          <div className="rounded-[1.6rem] bg-figma-card p-6 shadow-card">
+            <p className="font-display text-7xl text-mc-orange">3</p>
+            <SectionEyebrow>Simple Steps</SectionEyebrow>
+            <h2 className="mt-4 text-3xl font-semibold leading-tight text-mc-ink">How We Authenticate Your Items</h2>
+            <ButtonLink href="/checkout" tone="dark" className="mt-6 px-5 py-2.5 text-xs">
+              Authenticate Now
+            </ButtonLink>
+          </div>
+          <div className="grid gap-5 md:grid-cols-3">
+            {stepsData.map((step) => (
+              <article key={step.num} className="relative rounded-[1.4rem] bg-white p-4 shadow-card">
+                <span className="absolute -top-5 left-1/2 grid h-10 w-10 -translate-x-1/2 place-items-center rounded-full bg-mc-orange text-sm font-bold text-white shadow-orange">
+                  {step.num}
+                </span>
+                <h3 className="min-h-12 pt-5 text-center text-sm font-bold">{step.title}</h3>
+                <div className="relative mt-4 aspect-[4/3] overflow-hidden rounded-[1rem] bg-figma-panel">
+                  <Image src={step.image} alt="" fill sizes="(min-width: 1024px) 20vw, 82vw" className="object-cover" />
+                </div>
+              </article>
+            ))}
+          </div>
         </div>
       </div>
-      <p className="mt-4 min-h-14 text-sm leading-6 text-mc-ink/64">{rate.description}</p>
-      <ButtonLink href="/brands" tone={rate.featured ? "orange" : "dark"} className="mt-5 w-full">
+    </section>
+  );
+}
+
+export function RateCard({ rate }: { rate: Rate }) {
+  return (
+    <article className={cx("relative overflow-hidden rounded-[1.5rem] bg-figma-rate p-4 text-white shadow-card", rate.featured && "ring-2 ring-mc-orange ring-offset-2 ring-offset-white")}>
+      <div className="relative h-52 overflow-hidden rounded-[1.2rem] bg-gradient-to-b from-mc-muted to-mc-brown">
+        {rate.images.map((image, index) => (
+          <Image
+            key={image}
+            src={image}
+            alt=""
+            width={220}
+            height={220}
+            className={cx(
+              "absolute object-contain",
+              index === 0 && "bottom-0 left-0 h-40 w-40",
+              index === 1 && "bottom-0 right-0 h-36 w-36",
+              index === 2 && "bottom-2 left-1/2 h-24 w-28 -translate-x-1/2",
+            )}
+          />
+        ))}
+      </div>
+      <p className="mt-5 font-display text-2xl">{rate.name}</p>
+      <p className="mt-1 text-sm font-bold text-mc-orange">Start from</p>
+      <p className="mt-1 text-4xl font-bold">{rate.price}</p>
+      <p className="mt-2 min-h-10 text-xs leading-5 text-white/68">{rate.time}</p>
+      <ButtonLink href="/checkout" tone="orange" className="mt-5 w-full py-2 text-xs">
         Authenticate Now
       </ButtonLink>
     </article>
   );
 }
 
-export function TrustBar() {
+export function RatesPreview() {
   return (
-    <section className="bg-white px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto grid max-w-7xl grid-cols-2 gap-6 sm:grid-cols-4">
-        {trustStats.map((stat) => (
-          <div key={stat.label} className="text-center">
-            <p className="text-3xl font-bold text-mc-orange sm:text-4xl">{stat.value}</p>
-            <p className="mt-1 text-xs uppercase tracking-[0.18em] text-mc-ink/60">{stat.label}</p>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-export function WhyCard({ item }: { item: WhyItem }) {
-  const iconMap = {
-    global: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5a17.92 17.92 0 01-8.716-2.247m0 0A8.966 8.966 0 013 12c0-1.264.26-2.467.732-3.558" />
-      </svg>
-    ),
-    affordable: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.634 12 12 12c-.634 0-1.536-.219-2.121-.659C9.303 10.464 9.303 9.03 10.476 8.151c1.171-.879 3.07-.879 4.242 0M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-    payment: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
-      </svg>
-    ),
-    expert: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-      </svg>
-    ),
-  };
-
-  return (
-    <article className="rounded-[1.6rem] bg-white p-6 shadow-card">
-      <span className="grid h-12 w-12 place-items-center rounded-full bg-mc-orange/10 text-mc-orange">
-        {iconMap[item.icon]}
-      </span>
-      <h3 className="mt-4 text-lg font-bold">{item.title}</h3>
-      <p className="mt-2 text-sm leading-6 text-mc-ink/60">{item.description}</p>
-    </article>
-  );
-}
-
-export function WhySection() {
-  return (
-    <section className="bg-why px-4 py-16 sm:px-6 lg:px-8">
+    <section className="bg-white px-4 py-16 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <SectionTitle
-          eyebrow="Why MODACERT"
-          title="Why MODACERT is Your Best Option"
-        />
-        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {whyItems.map((item) => (
-            <WhyCard key={item.title} item={item} />
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <SectionEyebrow>Unlock our Rates</SectionEyebrow>
+            <h2 className="mt-3 max-w-4xl text-4xl font-semibold leading-tight text-mc-ink sm:text-5xl">
+              Double-verified by Two Experts for 99% accuracy at an affordable price
+            </h2>
+          </div>
+          <ButtonLink href="/checkout" tone="orange">Search Your Brand</ButtonLink>
+        </div>
+        <div className="mt-10 grid gap-5 lg:grid-cols-4">
+          {rates.map((rate) => (
+            <RateCard key={rate.name} rate={rate} />
           ))}
+          <article className="grid min-h-96 place-items-center rounded-[1.5rem] bg-mc-brown p-6 text-center text-white shadow-card">
+            <div>
+              <p className="text-5xl font-bold text-mc-orange">100+</p>
+              <p className="mt-4 font-display text-3xl leading-tight">Discover Our Supported Brands</p>
+              <ButtonLink href="/checkout" tone="orange" className="mt-6 py-2 text-xs">
+                Click to find out
+              </ButtonLink>
+            </div>
+          </article>
         </div>
       </div>
     </section>
   );
 }
 
-export function ProvenBanner() {
+export function WhySection() {
   return (
-    <section className="bg-hero px-4 py-14 text-white sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl text-center">
-        <p className="font-display text-3xl font-semibold sm:text-5xl">True Luxury, Truly Verified</p>
-        <p className="mx-auto mt-4 max-w-2xl text-sm leading-7 text-white/74 sm:text-base">
-          We are the industry leader in luxury item verification, providing 99% accuracy through our network of elite global experts
-        </p>
-        <div className="mt-10 grid grid-cols-2 gap-5 sm:grid-cols-4">
-          <div className="rounded-[1.4rem] bg-white/12 p-5 backdrop-blur">
-            <p className="text-4xl font-bold text-mc-orange">99%</p>
-            <p className="mt-2 text-xs uppercase tracking-[0.18em] text-white/62">Proven Accuracy</p>
+    <section className="bg-why px-4 py-10 sm:px-6 lg:px-8 lg:py-12">
+      <div className="mx-auto max-w-[1280px]">
+        <div className="relative flex flex-col gap-4 lg:h-[166px] lg:block">
+          <div className="flex min-w-0 items-center gap-3 lg:block">
+            <span className="relative grid h-[58px] w-[58px] shrink-0 place-items-center bg-white lg:absolute lg:left-[-31px] lg:top-0 lg:h-[163px] lg:w-[163px]">
+              <Image src={figma.mark} alt="" fill sizes="(min-width: 1024px) 163px, 58px" className="object-contain p-2 lg:p-5" />
+            </span>
+            <h2 className="max-w-[300px] text-[27px] font-semibold leading-[0.95] tracking-[-0.01em] text-black sm:max-w-[360px] sm:text-[32px] lg:absolute lg:left-[119px] lg:top-[54px] lg:max-w-[439px] lg:text-[36px]">
+              Why <span className="text-mc-orange">MODACERT</span> is Your <span className="text-mc-orange">Best Option</span>
+            </h2>
           </div>
-          <div className="rounded-[1.4rem] bg-white/12 p-5 backdrop-blur">
-            <p className="text-4xl font-bold text-mc-orange">100+</p>
-            <p className="mt-2 text-xs uppercase tracking-[0.18em] text-white/62">Specialists</p>
+          <div className="hidden h-px bg-mc-brown lg:absolute lg:left-[500px] lg:top-[92px] lg:block lg:w-[460px]" />
+          <ButtonLink href="/checkout" tone="dark" className="h-10 shrink-0 px-6 py-0 text-[11px] lg:absolute lg:left-[980px] lg:top-[59px] lg:h-[63px] lg:w-[249px] lg:px-0 lg:text-base">
+            Authenticate Now
+          </ButtonLink>
+        </div>
+
+        <div className="mt-4 grid gap-2.5 lg:mt-0 lg:grid-cols-[441px_441px_373px] lg:grid-rows-[234px_234px] lg:gap-x-[12px] lg:gap-y-[17px]">
+          <article className="relative min-h-[152px] overflow-hidden rounded-[0.45rem] bg-why-global-card p-6 text-black lg:h-[234px] lg:p-[37px]">
+            <div className="relative z-10 max-w-[58%]">
+              <h3 className="text-xl font-bold leading-tight lg:text-[32px]">Global Service</h3>
+              <p className="mt-4 text-xs leading-5 text-white lg:mt-[18px] lg:text-base lg:leading-[1.55] lg:text-white">Our team can verify your items no matter where you are.</p>
+            </div>
+            <Image src={figma.whyGlobal} alt="" width={151} height={211} className="absolute -right-1 bottom-3 h-[211px] w-[151px] object-contain lg:right-0 lg:top-[11px]" />
+          </article>
+
+          <article className="min-h-[152px] overflow-hidden rounded-[0.45rem] bg-why-pricing-card p-6 text-white lg:h-[234px] lg:p-[35px]">
+            <h3 className="text-xl font-bold leading-tight text-mc-ink lg:text-[32px]">Affordable Pricing</h3>
+            <p className="mt-4 max-w-[270px] text-xs leading-5 text-white lg:mt-[18px] lg:max-w-[350px] lg:text-base lg:leading-[1.55]">Designed for collectors and resellers, we make legit checks accessible.</p>
+          </article>
+
+          <article className="relative min-h-[312px] overflow-hidden rounded-[0.45rem] bg-why-payment-card p-6 text-white lg:row-span-2 lg:h-[485px] lg:p-[16px]">
+            <div className="relative z-10">
+              <h3 className="text-xl font-bold leading-tight lg:text-[32px]">Flexible Payments</h3>
+              <p className="mt-4 max-w-[230px] text-xs leading-5 text-white/90 lg:mt-[14px] lg:max-w-[318px] lg:text-base lg:leading-[1.55]">We support various payment methods to make your checkout simple and secure.</p>
+            </div>
+            <Image src={figma.whyPayment} alt="" width={340} height={328} className="absolute -bottom-7 right-[-22px] h-[328px] w-[340px] object-contain" />
+          </article>
+
+          <article className="relative min-h-[152px] overflow-hidden rounded-[0.45rem] bg-why-expert-card p-6 text-white lg:col-span-2 lg:h-[234px] lg:p-[37px]">
+            <div className="relative z-10 max-w-[54%] lg:max-w-[536px]">
+              <h3 className="text-xl font-bold leading-tight lg:text-[32px]">Expert Review</h3>
+              <p className="mt-4 text-xs leading-5 text-white lg:mt-[18px] lg:text-base lg:leading-[1.55]">Verified by real people who know the brands inside and out, combined with second expert for extra precision and 99% accuracy.</p>
+            </div>
+            <Image src={figma.whyExpertPeople} alt="" width={538} height={316} className="absolute bottom-[-86px] right-0 hidden h-[316px] w-[538px] object-contain sm:block" />
+          </article>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function BrandSearchSection() {
+  return (
+    <section className="bg-figma-search px-4 py-16 text-white sm:px-6 lg:px-8">
+      <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.88fr_1.12fr] lg:items-center">
+        <h2 className="max-w-lg text-4xl font-semibold leading-tight">
+          We support your authenticated more than <span className="text-mc-orange">100 brand</span>
+        </h2>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-mc-orange">Choose your Categories</p>
+          <div className="mt-6 flex gap-4 overflow-x-auto pb-3 hide-scrollbar">
+            {categories.slice(0, 7).map((category) => (
+              <Link key={category.title} href="/checkout" transitionTypes={["nav-forward"]} className="grid min-w-24 place-items-center rounded-full bg-mc-soft p-4 text-mc-ink shadow-soft">
+                <div className="relative h-12 w-12">
+                  <Image src={category.icon} alt={category.title} fill sizes="48px" className="object-contain" />
+                </div>
+              </Link>
+            ))}
           </div>
-          <div className="rounded-[1.4rem] bg-white/12 p-5 backdrop-blur">
-            <p className="text-4xl font-bold text-mc-orange">40+</p>
-            <p className="mt-2 text-xs uppercase tracking-[0.18em] text-white/62">Brands</p>
-          </div>
-          <div className="rounded-[1.4rem] bg-white/12 p-5 backdrop-blur">
-            <p className="text-4xl font-bold text-mc-orange">4.9</p>
-            <p className="mt-2 text-xs uppercase tracking-[0.18em] text-white/62">Excellent Rating</p>
+          <div className="mt-6 max-w-xl">
+            <div className="relative">
+              <input type="text" placeholder="Search your brand" className="w-full rounded-full border border-white/20 bg-white px-6 py-4 text-sm text-mc-ink outline-none placeholder:text-mc-ink/38 focus:border-mc-orange focus:ring-2 focus:ring-mc-orange/30" />
+              <ButtonLink href="/checkout" tone="orange" className="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-2 text-xs">
+                <ArrowIcon />
+              </ButtonLink>
+            </div>
           </div>
         </div>
       </div>
@@ -355,20 +448,19 @@ export function ProvenBanner() {
 
 export function CTABanner() {
   return (
-    <section className="bg-cta px-4 py-16 text-white sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-4xl text-center">
-        <p className="font-display text-3xl font-semibold sm:text-5xl">
-          Don&apos;t Wait, Get Your Moda Check Now
-        </p>
-        <p className="mt-4 text-sm leading-7 text-white/74 sm:text-base">
-          Double-verified by Two Experts for 99% accuracy at an affordable price
-        </p>
-        <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <ButtonLink href="/authenticate" tone="orange" className="px-8 py-3.5 text-base">
+    <section className="bg-white px-4 py-16 sm:px-6 lg:px-8">
+      <div className="mx-auto grid max-w-7xl gap-8 overflow-hidden rounded-[1.6rem] bg-figma-panel p-6 shadow-card lg:grid-cols-[0.95fr_1.05fr] lg:p-10">
+        <div className="relative min-h-[330px]">
+          <Image src={figma.ctaBag} alt="Luxury bag" fill sizes="(min-width: 1024px) 30vw, 88vw" className="object-contain object-left-bottom" />
+          <Image src={figma.ctaWatch} alt="Luxury watch" width={190} height={190} className="absolute right-[18%] top-[4%]" />
+          <Image src={figma.ctaShoe} alt="Luxury shoe" width={300} height={220} className="absolute bottom-0 right-[4%]" />
+        </div>
+        <div className="self-center text-center lg:text-left">
+          <h2 className="font-display text-5xl leading-[0.95] text-mc-ink sm:text-6xl">
+            Don&apos;t Wait, Get Your <span className="text-mc-orange">Moda</span> Check Now
+          </h2>
+          <ButtonLink href="/checkout" tone="dark" className="mt-8">
             Start Moda Check
-          </ButtonLink>
-          <ButtonLink href="/rates" tone="light" className="px-8 py-3.5 text-base">
-            Unlock Our Rates
           </ButtonLink>
         </div>
       </div>
@@ -376,28 +468,20 @@ export function CTABanner() {
   );
 }
 
-export function HowItWorks() {
-  const stepsData = [
-    { num: "1", title: "Upload clear photos of your item", image: "/landing/step-1.png" },
-    { num: "2", title: "Our experts verify it", image: "/landing/step-2.png" },
-    { num: "3", title: "Get your certificate starting at 40 mins", image: "/landing/step-3.png" },
-  ];
-
+export function ProvenBanner() {
   return (
-    <section className="px-4 py-16 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <SectionTitle eyebrow="Simple Steps" title="How We Authenticate Your Items" />
-        <div className="mt-10 grid gap-6 md:grid-cols-3">
-          {stepsData.map((step) => (
-            <article key={step.num} className="rounded-[1.6rem] bg-white p-4 shadow-card">
-              <div className="relative aspect-[4/3] overflow-hidden rounded-[1.2rem] bg-product">
-                <Image src={step.image} alt="" fill sizes="(min-width: 1024px) 28vw, 88vw" className="object-cover" />
-                <span className="absolute left-3 top-3 grid h-9 w-9 place-items-center rounded-full bg-mc-orange text-sm font-bold text-white">
-                  {step.num}
-                </span>
-              </div>
-              <h3 className="mt-4 text-lg font-bold">{step.title}</h3>
-            </article>
+    <section className="bg-figma-rate px-4 py-14 text-white sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl text-center">
+        <p className="font-display text-3xl font-semibold sm:text-5xl">True Luxury, Truly Verified</p>
+        <p className="mx-auto mt-4 max-w-2xl text-sm leading-7 text-white/74 sm:text-base">
+          We are the industry leader in luxury item verification, providing 99% accuracy through our network of elite global experts.
+        </p>
+        <div className="mt-10 grid grid-cols-2 gap-5 sm:grid-cols-4">
+          {trustStats.map((stat) => (
+            <div key={stat.label} className="rounded-[1.2rem] bg-white/12 p-5 backdrop-blur">
+              <p className="text-4xl font-bold text-mc-orange">{stat.value}</p>
+              <p className="mt-2 text-xs uppercase tracking-[0.18em] text-white/62">{stat.label}</p>
+            </div>
           ))}
         </div>
       </div>
@@ -405,136 +489,17 @@ export function HowItWorks() {
   );
 }
 
-export function NFCSection() {
-  return (
-    <section className="bg-white px-4 py-16 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <SectionTitle
-          eyebrow="NFC microchip"
-          title="Upload the photos of your item"
-          description="Choose your authentication path based on your item type"
-        />
-        <div className="mt-10 grid gap-5 lg:grid-cols-2">
-          <div className="rounded-[1.6rem] border-2 border-mc-orange bg-white p-6 shadow-card">
-            <div className="mb-4">
-              <span className="inline-flex items-center gap-2 rounded-full bg-mc-orange px-4 py-1.5 text-xs font-bold uppercase tracking-[0.14em] text-white">
-                1
-              </span>
-            </div>
-            <h3 className="text-xl font-bold">For items with visible NFC chips</h3>
-            <p className="mt-2 text-sm leading-6 text-mc-ink/60">
-              Scan the QR Code to use NFC Microchip scanner, then upload photos of your item.
-            </p>
-            <div className="mt-6 grid gap-4 sm:grid-cols-3">
-              {nfcPhotoSlots.map((slot) => (
-                <PhotoSlotCard key={slot.key} slot={slot} />
-              ))}
-            </div>
-            <ButtonLink href="/authenticate" tone="orange" className="mt-6 w-full">
-              Authenticate Now
-            </ButtonLink>
-          </div>
-          <div className="rounded-[1.6rem] border border-mc-muted bg-white p-6 shadow-card">
-            <div className="mb-4">
-              <span className="inline-flex items-center gap-2 rounded-full bg-mc-ink px-4 py-1.5 text-xs font-bold uppercase tracking-[0.14em] text-white">
-                2
-              </span>
-            </div>
-            <h3 className="text-xl font-bold">For items without NFC chips</h3>
-            <p className="mt-2 text-sm leading-6 text-mc-ink/60">
-              My items have no NFC Microchip. Upload the required photos one by one.
-            </p>
-            <div className="mt-6 grid gap-4 sm:grid-cols-3">
-              {nonNfcPhotoSlots.slice(0, 3).map((slot) => (
-                <PhotoSlotCard key={slot.key} slot={slot} />
-              ))}
-            </div>
-            <div className="mt-4 grid gap-4 sm:grid-cols-3">
-              {nonNfcPhotoSlots.slice(3).map((slot) => (
-                <PhotoSlotCard key={slot.key} slot={slot} />
-              ))}
-            </div>
-            <ButtonLink href="/authenticate" tone="dark" className="mt-6 w-full">
-              Authenticate Now
-            </ButtonLink>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function PhotoSlotCard({ slot }: { slot: PhotoSlot }) {
-  return (
-    <div className="rounded-[1.1rem] bg-mc-cream p-2">
-      <div className="relative aspect-square overflow-hidden rounded-[0.8rem] bg-product">
-        <Image src={slot.image} alt={slot.label} fill sizes="(min-width: 1024px) 14vw, 42vw" className="object-cover" />
-      </div>
-      <p className="mt-2 text-xs font-bold">{slot.label}</p>
-    </div>
-  );
-}
-
-export function BrandSearchSection() {
-  return (
-    <section className="px-4 py-16 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <SectionTitle
-          eyebrow="Search your brand"
-          title="Let us know your brand before verify"
-        />
-        <div className="mx-auto mt-10 max-w-xl">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Specify your brand here"
-              className="w-full rounded-full border border-mc-muted bg-white px-6 py-4 text-sm text-mc-ink outline-none placeholder:text-mc-ink/38 focus:border-mc-orange focus:ring-2 focus:ring-mc-orange/30"
-            />
-            <Link
-              href="/brands"
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-mc-orange px-5 py-2.5 text-sm font-bold text-white shadow-orange transition hover:bg-mc-orange-dark"
-            >
-              Search
-            </Link>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-export function RatingBanner() {
-  return (
-    <div className="flex items-center justify-center gap-2 py-3 text-sm">
-      <div className="flex gap-0.5">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <svg key={i} className="h-4 w-4 text-mc-orange" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-          </svg>
-        ))}
-      </div>
-      <span className="font-bold">Excellent 4.9 out of 5</span>
-    </div>
-  );
-}
-
 export function Footer() {
   return (
     <footer className="bg-white">
       <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-        <div className="grid gap-10 lg:grid-cols-[1fr_340px]">
+        <div className="grid gap-10 lg:grid-cols-[1fr_380px]">
           <div>
             <BrandMark />
-            <p className="mt-4 font-display text-2xl font-semibold text-mc-ink">
-              True Luxury, Truly Verified
-            </p>
-            <p className="mt-2 max-w-md text-sm leading-6 text-mc-ink/60">
-              We are the industry leader in luxury item verification, providing 99% accuracy through our network of elite global experts
-            </p>
             <div className="mt-8 grid gap-7 text-sm text-mc-ink/60 sm:grid-cols-2 lg:grid-cols-4">
               {footerColumns.map((column) => (
                 <div key={column.title}>
-                  <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-mc-ink">{column.title}</h3>
+                  <h3 className="text-sm font-bold text-mc-ink">{column.title}</h3>
                   <ul className="mt-4 space-y-2">
                     {column.links.map((link) => (
                       <li key={link} className="transition hover:text-mc-orange">{link}</li>
@@ -543,47 +508,43 @@ export function Footer() {
                 </div>
               ))}
             </div>
-            <div className="mt-6">
-              <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-mc-ink">Categories</h3>
+            <div className="mt-7">
+              <h3 className="text-sm font-bold text-mc-ink">Categories</h3>
               <div className="mt-3 flex flex-wrap gap-2">
                 {footerCategories.map((cat) => (
-                  <span key={cat} className="rounded-full border border-mc-muted px-3 py-1 text-xs font-semibold">
-                    {cat}
+                  <span key={cat} className="rounded-full border border-mc-muted px-3 py-1 text-xs font-semibold">{cat}</span>
+                ))}
+              </div>
+            </div>
+            <div className="mt-8">
+              <h3 className="text-sm font-bold text-mc-ink">Follow us</h3>
+              <div className="mt-3 flex flex-wrap gap-3">
+                {socialLinks.map((item) => (
+                  <span key={item.label} className="relative h-7 w-7">
+                    <Image src={item.image} alt={item.label} fill sizes="28px" className="object-contain" />
                   </span>
                 ))}
               </div>
             </div>
           </div>
-          <div className="rounded-[1.4rem] bg-mc-brown p-5 text-white shadow-soft">
-            <p className="font-display text-2xl">Subscribe</p>
-            <p className="mt-3 text-sm leading-6 text-white/72">
-              Subscribe for our newsletter and best promotions
-            </p>
+          <div className="rounded-[1.4rem] bg-mc-brown p-6 text-white shadow-soft">
+            <p className="font-display text-3xl">Subscribe</p>
+            <p className="mt-3 text-sm leading-6 text-white/72">Subscribe for our newsletter and best promotions</p>
             <form action="/" className="mt-5">
-              <label htmlFor="newsletter-email" className="sr-only">
-                Email
-              </label>
-              <input
-                id="newsletter-email"
-                name="email"
-                type="email"
-                placeholder="My Email"
-                className="w-full rounded-full border border-white/15 bg-white px-4 py-3 text-sm text-mc-ink outline-none placeholder:text-mc-ink/38 focus:border-mc-orange focus:ring-2 focus:ring-mc-orange/45"
-              />
+              <label htmlFor="newsletter-email" className="sr-only">Email</label>
+              <input id="newsletter-email" name="email" type="email" placeholder="My Email" className="w-full rounded-full border border-white/15 bg-white px-4 py-3 text-sm text-mc-ink outline-none placeholder:text-mc-ink/38 focus:border-mc-orange focus:ring-2 focus:ring-mc-orange/45" />
               <button type="submit" className="mt-3 w-full rounded-full bg-mc-orange px-4 py-3 text-sm font-bold text-white transition hover:bg-mc-orange-dark">
-                Subscribe Now
+                Subscribe
               </button>
             </form>
-            <a href="mailto:modacert.support@gmail.com" className="mt-5 inline-flex text-sm text-mc-orange">
-              modacert.support@gmail.com
-            </a>
+            <p className="mt-7 font-display text-2xl">Contact us</p>
+            <a href="mailto:modacert.support@gmail.com" className="mt-3 inline-flex text-sm text-mc-orange">modacert.support@gmail.com</a>
           </div>
         </div>
       </div>
-      <div className="bg-black px-4 py-9 text-white sm:px-6 lg:px-8">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <p className="font-logo text-3xl tracking-[0.2em] sm:text-5xl">MODACERT</p>
-          <p className="text-xs uppercase tracking-[0.18em] text-white/42">True Luxury, Truly Verified</p>
+      <div className="bg-black px-4 py-10 text-white sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl">
+          <p className="font-logo text-5xl tracking-[0.18em] sm:text-7xl">MODACERT</p>
         </div>
       </div>
     </footer>
@@ -601,6 +562,7 @@ export function AppFrame({ children, currentStep }: { children: React.ReactNode;
       ) : null}
       {children}
       <Footer />
+      <FloatingChatWidget />
     </main>
   );
 }

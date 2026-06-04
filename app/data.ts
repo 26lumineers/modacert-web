@@ -1,6 +1,7 @@
 export type Category = {
   title: string;
   image: string;
+  icon: string;
   alt: string;
   active: boolean;
 };
@@ -10,14 +11,14 @@ export type Rate = {
   price: string;
   time: string;
   description: string;
-  image: string;
+  images: string[];
   featured?: boolean;
 };
 
 export type WhyItem = {
   title: string;
   description: string;
-  icon: "global" | "affordable" | "payment" | "expert";
+  image: string;
 };
 
 export type PhotoSlot = {
@@ -25,6 +26,7 @@ export type PhotoSlot = {
   label: string;
   description: string;
   image: string;
+  required: boolean;
 };
 
 export type BrandTier = {
@@ -32,85 +34,110 @@ export type BrandTier = {
   brands: string[];
 };
 
+export const figma = {
+  hero: "/figma/hero-luxury-bags.png",
+  mark: "/figma/modacert-mark.png",
+  cart: "/figma/cart.png",
+  chat: "/figma/chat-widget.png",
+  trustpilot: "/figma/trustpilot-white.png",
+  footerMark: "/figma/footer-mark.png",
+  ctaBag: "/figma/cta-bag.png",
+  ctaWatch: "/figma/cta-watch.png",
+  ctaShoe: "/figma/cta-shoe.png",
+  creditCard: "/figma/why-payment-card.png",
+  whyGlobal: "/figma/why-global.png",
+  whyPayment: "/figma/why-payment-card.png",
+  whyExpertPeople: "/figma/why-expert-bag.png",
+  google: "/figma/google-g-logo.png",
+};
+
 export const navItems = [
   { label: "Home", href: "/" },
-  { label: "Authenticate", href: "/authenticate" },
-  { label: "Sign In", href: "/signin" },
+  { label: "Authenticate", href: "/checkout" },
+  { label: "Rates", href: "/rates" },
 ] as const;
 
 export const categories: Category[] = [
   {
     title: "Handbags",
-    image: "/landing/category-handbag.png",
+    image: "/figma/category-handbag.png",
+    icon: "/figma/icon-shopping-bag.png",
     alt: "Luxury handbag authentication",
     active: true,
   },
   {
     title: "Clothing",
-    image: "/landing/category-clothing.png",
+    image: "/figma/category-clothing-cropped.png",
+    icon: "/figma/icon-tshirt.png",
     alt: "Luxury clothing authentication",
     active: true,
   },
   {
-    title: "Sneaker",
-    image: "/landing/category-shoe.png",
-    alt: "Luxury sneaker authentication",
-    active: true,
-  },
-  {
     title: "Watches",
-    image: "/landing/category-watch.png",
+    image: "/figma/category-watch.png",
+    icon: "/landing/hero-watch.png",
     alt: "Luxury watch authentication",
     active: true,
   },
   {
     title: "Shoes",
-    image: "/landing/hero-shoe.png",
+    image: "/figma/shoes-lv-trainer-cropped.png",
+    icon: "/figma/icon-sneaker.png",
     alt: "Luxury shoe authentication",
     active: true,
   },
   {
     title: "Jewelry",
-    image: "/landing/category-jewelry.png",
+    image: "/figma/category-jewelry.png",
+    icon: "/figma/icon-jewelry.png",
     alt: "Luxury jewelry authentication",
     active: true,
   },
   {
-    title: "Accessories",
-    image: "/landing/service-bag.png",
-    alt: "Luxury accessory authentication",
+    title: "Sneakers",
+    image: "/figma/sneaker-air-jordan.png",
+    icon: "/figma/icon-sneaker.png",
+    alt: "Luxury sneaker authentication",
     active: true,
   },
   {
     title: "Eyewear",
-    image: "/landing/why-expert.png",
+    image: "/figma/rate-chanel-glasses.png",
+    icon: "/figma/rate-chanel-glasses.png",
     alt: "Luxury eyewear authentication",
+    active: true,
+  },
+  {
+    title: "Accessories",
+    image: "/figma/rate-hermes-orange-bag.png",
+    icon: "/figma/icon-shopping-bag.png",
+    alt: "Luxury accessory authentication",
     active: true,
   },
 ];
 
 export const rates: Rate[] = [
   {
-    name: "Essential Check",
-    price: "$19.9",
+    name: "Louis Vuitton",
+    price: "$20",
     time: "Result from 40 min",
-    description: "Single expert review for everyday resale and buyer confidence.",
-    image: "/landing/category-handbag.png",
+    description: "Handbags, clothing, sneakers, watches, and accessories reviewed by specialist authenticators.",
+    images: ["/figma/rate-lv-bag.png", "/figma/rate-lv-shirt.png", "/figma/category-sneaker.png"],
   },
   {
-    name: "Priority Check",
-    price: "$29.9",
-    time: "Priority queue",
-    description: "Double-verified by Two Experts for 99% accuracy at an affordable price.",
-    image: "/landing/hero-bag.png",
+    name: "Chanel",
+    price: "$20",
+    time: "Double expert review",
+    description: "Affordable luxury authentication with clear photo requirements and expert-backed decisions.",
+    images: ["/figma/rate-chanel-bag.png", "/figma/rate-chanel-perfume.png", "/figma/rate-chanel-glasses.png"],
     featured: true,
   },
   {
-    name: "Deep Check",
-    price: "Start from $20",
+    name: "Hermes",
+    price: "$20",
     time: "Detailed notes",
-    description: "Extra close review for high-value items, serial marks, and hardware.",
-    image: "/landing/service-bag.png",
+    description: "Specialist review for premium leather, hardware, stamps, serial details, and construction.",
+    images: ["/figma/rate-hermes-birkin.png", "/figma/rate-hermes-orange-bag.png"],
   },
 ];
 
@@ -153,216 +180,127 @@ export const brandTiers: BrandTier[] = [
   },
   {
     label: "Street Brand",
-    brands: [
-      "Supreme",
-      "Bape",
-      "Air Jordan",
-      "Chrome Hearts",
-      "Alexander Mcqueen",
-      "Versace",
-    ],
+    brands: ["Supreme", "Bape", "Air Jordan", "Chrome Hearts", "Alexander Mcqueen", "Versace"],
   },
 ];
 
 export const brands = [
-  "Louis Vuitton",
-  "Chanel",
-  "Hermes",
-  "Gucci",
-  "Dior",
-  "Saint Laurent",
-  "Goyard",
-  "Burberry",
-  "Balenciaga",
-  "Bvlgari",
-  "Bottega Veneta",
-  "Celine",
-  "Chloe",
-  "Delvaux",
-  "Fendi",
-  "Givenchy",
-  "Issey Miyake",
-  "Loewe",
-  "Miu Miu",
-  "Moynat",
-  "Mcm",
-  "Prada",
-  "Ferragamo",
-  "Vivienne Westwood",
-  "Valentino",
-  "Air Jordan",
-  "Chrome Hearts",
-  "Versace",
-  "Supreme",
-  "Alexander Mcqueen",
-  "Bape",
-  "Other bags",
+  ...brandTiers[0].brands,
+  "Other brands",
 ] as const;
 
-export const nfcPhotoSlots: PhotoSlot[] = [
+export const checkoutPhotoSlots: PhotoSlot[] = [
   {
-    key: "nfc-main",
+    key: "front",
     label: "Main photo",
-    description: "Full item visible, clear lighting",
-    image: "/landing/category-handbag.png",
+    description: "Full item visible with clear lighting",
+    image: "/figma/step-bag.png",
+    required: true,
   },
   {
-    key: "nfc-brand",
+    key: "logo",
     label: "Brand Logo",
-    description: "Logo or stamp in focus",
-    image: "/landing/service-bag.png",
+    description: "Logo stamp, print, or embossing",
+    image: "/figma/why-expert-bag.png",
+    required: true,
   },
   {
-    key: "nfc-label",
+    key: "interior",
     label: "Inside label",
     description: "Interior label and tags",
-    image: "/landing/step-1.png",
-  },
-];
-
-export const nonNfcPhotoSlots: PhotoSlot[] = [
-  {
-    key: "main-photo",
-    label: "Main photo",
-    description: "Full item visible, clear lighting",
-    image: "/landing/category-handbag.png",
+    image: "/figma/step-expert.png",
+    required: true,
   },
   {
-    key: "brand-logo",
-    label: "Brand Logo",
-    description: "Logo stamp or embossing",
-    image: "/landing/service-bag.png",
-  },
-  {
-    key: "inside-label",
-    label: "Inside label",
-    description: "Interior label and tags",
-    image: "/landing/step-1.png",
-  },
-  {
-    key: "hardware-engravings",
+    key: "back",
     label: "Hardware engravings",
-    description: "Zippers, clasps, metal markings",
-    image: "/landing/category-jewelry.png",
+    description: "Metal hardware, stamps, or engraved markings",
+    image: "/figma/category-handbag.png",
+    required: true,
   },
   {
-    key: "serial-number",
+    key: "serial_number",
     label: "Serial number",
-    description: "Date code or serial clearly shown",
-    image: "/landing/step-2.png",
+    description: "Date code, serial, or product code clearly shown",
+    image: "/figma/why-payment-card.png",
+    required: false,
   },
   {
-    key: "made-in-label",
+    key: "label_tag",
     label: "Made in label",
-    description: "Country and factory code",
-    image: "/landing/step-3.png",
-  },
-];
-
-export const clothingPhotoSlots: PhotoSlot[] = [
-  {
-    key: "clothing-main",
-    label: "Main photo",
-    description: "Full garment clearly visible",
-    image: "/landing/category-clothing.png",
+    description: "Country of origin and factory label",
+    image: "/figma/category-clothing.png",
+    required: false,
   },
   {
-    key: "clothing-brand",
-    label: "Brand Logo",
-    description: "Logo label or tag",
-    image: "/landing/service-bag.png",
-  },
-  {
-    key: "clothing-label",
-    label: "Inside label",
-    description: "Care tag and sizing info",
-    image: "/landing/step-1.png",
-  },
-  {
-    key: "clothing-qr",
+    key: "qr_code_label",
     label: "QR code label",
-    description: "QR tag if present",
-    image: "/landing/step-2.png",
+    description: "QR, NFC, or scannable authenticity label",
+    image: "/figma/category-jewelry.png",
+    required: false,
   },
   {
-    key: "clothing-zipper",
+    key: "zipper_head",
     label: "Zipper head (front)",
-    description: "Zipper hardware close-up",
-    image: "/landing/category-jewelry.png",
+    description: "Front zipper pull and finish details",
+    image: "/figma/category-sneaker.png",
+    required: false,
   },
   {
-    key: "clothing-strap",
+    key: "strap_clasp",
     label: "Shoulder strap clasp",
-    description: "Strap attachment and hardware",
-    image: "/landing/step-3.png",
+    description: "Clasp, hook, strap, or attachment detail",
+    image: "/figma/step-certificate.png",
+    required: false,
+  },
+  {
+    key: "additional",
+    label: "Additional photos",
+    description: "Any extra proof, flaw, receipt, or detail angle",
+    image: "/figma/cta-bag.png",
+    required: false,
   },
 ];
 
-export const uploadRequirements = [
-  {
-    title: "Front view",
-    description: "Full item shape, handles, and front logo area.",
-    image: "/landing/category-handbag.png",
-  },
-  {
-    title: "Back view",
-    description: "Back stitching and structure in clear light.",
-    image: "/landing/step-1.png",
-  },
-  {
-    title: "Brand mark",
-    description: "Logo, stamp, or heat embossing in focus.",
-    image: "/landing/service-bag.png",
-  },
-  {
-    title: "Hardware",
-    description: "Zippers, clasps, chain, lock, and metal finishing.",
-    image: "/landing/category-jewelry.png",
-  },
-  {
-    title: "Interior",
-    description: "Inside lining, pockets, date code, and serial marks.",
-    image: "/landing/cta-bag.png",
-  },
-  {
-    title: "Receipt or box",
-    description: "Optional supporting packaging or purchase documents.",
-    image: "/landing/service-collage.png",
-  },
-] as const;
+export const nfcPhotoSlots = checkoutPhotoSlots.slice(0, 3);
+export const nonNfcPhotoSlots = checkoutPhotoSlots.slice(0, 6);
+export const clothingPhotoSlots = checkoutPhotoSlots;
+
+export const uploadRequirements = checkoutPhotoSlots.map((slot) => ({
+  title: slot.label,
+  description: slot.description,
+  image: slot.image,
+}));
 
 export const steps = [
-  { label: "Rates", href: "/rates" },
-  { label: "Brand", href: "/brands" },
-  { label: "Photos", href: "/authenticate" },
-  { label: "Payment", href: "/payment" },
-  { label: "Upload", href: "/upload" },
+  { label: "Brand", href: "/checkout?step=brand" },
+  { label: "Category", href: "/checkout?step=category" },
+  { label: "NFC", href: "/checkout?step=nfc" },
+  { label: "Photos", href: "/checkout?step=upload" },
+  { label: "Payment", href: "/checkout?step=payment" },
+  { label: "Done", href: "/checkout?step=done" },
 ] as const;
 
 export const whyItems: WhyItem[] = [
   {
     title: "Global Service",
-    description:
-      "Our team can verify your items no matter where you are.",
-    icon: "global",
+    description: "Our team can verify your items no matter where you are.",
+    image: "/figma/why-global.png",
   },
   {
     title: "Affordable Pricing",
-    description:
-      "Designed for collectors and resellers, we make legit checks accessible.",
-    icon: "affordable",
+    description: "Designed for collectors and resellers, we make legit checks accessible.",
+    image: "/figma/why-expert-bag.png",
   },
   {
     title: "Flexible Payments",
-    description:
-      "We support various payment methods to make your checkout seamless and secure.",
-    icon: "payment",
+    description: "We support various payment methods to make your checkout seamless and secure.",
+    image: "/figma/why-payment-card.png",
   },
   {
     title: "Expert Review",
-    description:
-      "Verified by real people who know the brands inside and out, combined with second expert for extra precision and 99% accuracy. No guesswork.",
-    icon: "expert",
+    description: "Verified by real people who know the brands inside and out, combined with second expert for extra precision and 99% accuracy. No guesswork.",
+    image: "/figma/icon-auth-comments.png",
   },
 ];
 
@@ -376,48 +314,31 @@ export const trustStats = [
 export const footerColumns = [
   {
     title: "Authentication",
-    links: [
-      "Authenticate Now",
-      "Courses",
-      "Verify your certificate",
-    ],
-  },
-  {
-    title: "Business",
-    links: [
-      "Business solutions",
-      "Real vs Fake guides",
-      "Reseller guides",
-      "Case studies",
-      "Free authentication",
-    ],
+    links: ["Authenticate now", "Business solutions", "Verify your certificate"],
   },
   {
     title: "Learn",
-    links: ["About", "Help Center", "Reviews", "Contact us"],
+    links: ["Courses", "Real vs Fake guides", "Reseller guides", "Case studies", "Free authentication", "About", "Reviews"],
   },
   {
     title: "Legal",
-    links: [
-      "Terms of service",
-      "Privacy policy",
-      "Refund policy",
-      "Sitemap",
-    ],
+    links: ["Terms of service", "Privacy policy", "Refund policy", "Sitemap"],
+  },
+  {
+    title: "Help",
+    links: ["Help Center", "Contact us"],
   },
 ] as const;
 
-export const footerCategories = [
-  "Handbags",
-  "Clothing",
-  "Shoes",
-  "Jewelry",
-  "Watches",
-  "Eyewear",
+export const footerCategories = ["Handbags", "Clothing", "Shoes", "Jewelry", "Watches", "Eyewear"];
+
+export const socialLinks = [
+  { label: "Instagram", image: "/figma/social-instagram.png" },
+  { label: "Facebook", image: "/figma/social-facebook.png" },
+  { label: "YouTube", image: "/figma/social-youtube.png" },
+  { label: "TikTok", image: "/figma/social-tiktok.png" },
+  { label: "LinkedIn", image: "/figma/social-linkedin.png" },
+  { label: "Email", image: "/figma/social-email.png" },
 ];
 
-export const heroStats = [
-  { value: "100,000+", label: "Happy Customers" },
-  { value: "500,000+", label: "Items Authenticated" },
-  { value: "40+", label: "Brand" },
-];
+export const heroStats = trustStats.slice(0, 3);
