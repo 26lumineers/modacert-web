@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import { login } from "../_lib/api";
-import { saveAuth } from "../_lib/auth";
+import { saveAuth, getStoredEmail, isRemembered } from "../_lib/auth";
 import { AuthDivider, AuthField, AuthHeading, AuthPrimaryButton, AuthShell, GoogleButton } from "../auth-ui";
 
 function messageFromError(error: unknown) {
@@ -22,9 +22,9 @@ function messageFromError(error: unknown) {
 export default function SignInPage() {
   const router = useRouter();
   const registered = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("registered");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => getStoredEmail() ?? "");
   const [password, setPassword] = useState("");
-  const [remember, setRemember] = useState(false);
+  const [remember, setRemember] = useState(() => isRemembered());
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -34,7 +34,7 @@ export default function SignInPage() {
     setError("");
     try {
       const response = await login(email, password);
-      saveAuth(response.accessToken, response.user);
+      saveAuth(response.accessToken, response.user, remember);
       router.push("/checkout", { transitionTypes: ["nav-forward"] });
     } catch (err) {
       setError(messageFromError(err));

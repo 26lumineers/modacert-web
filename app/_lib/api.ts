@@ -1,5 +1,5 @@
 import axios from "axios";
-import { clearAuth } from "./auth";
+import { clearAuth, getStoredToken } from "./auth";
 import { config } from "./config";
 
 const userApi = axios.create({ baseURL: `${config.services.user}${config.apiPrefix}` });
@@ -91,6 +91,11 @@ export function setAuthToken(token: string | null) {
     delete userApi.defaults.headers.common["Authorization"];
     delete paymentApi.defaults.headers.common["Authorization"];
   }
+}
+
+if (typeof window !== "undefined") {
+  const restored = getStoredToken();
+  if (restored) setAuthToken(restored);
 }
 
 export interface Brand {

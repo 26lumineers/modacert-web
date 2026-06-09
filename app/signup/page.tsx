@@ -74,7 +74,7 @@ export default function SignUpPage() {
     try {
       const response = await register({ ...form });
       if ("accessToken" in response) {
-        saveAuth(response.accessToken, response.user);
+        saveAuth(response.accessToken, response.user, false);
         router.push("/checkout", { transitionTypes: ["nav-forward"] });
       } else {
         router.push("/signin?registered=1", { transitionTypes: ["nav-forward"] });

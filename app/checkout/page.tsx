@@ -255,7 +255,7 @@ export default function CheckoutPage() {
       const response = await withCheckoutRetry(() => login(email, password));
       setToken(response.accessToken);
       setUser(response.user);
-      saveAuth(response.accessToken, response.user);
+      saveAuth(response.accessToken, response.user, false);
       goTo("brand");
     } catch (err) {
       if (isRetryableServiceError(err)) setServiceError("auth-service");
