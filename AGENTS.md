@@ -46,7 +46,7 @@ app/
 ```
 
 ---
-
+ 
 ## Environment Variables (`.env.local`)
 
 | Variable | Example | Purpose |
