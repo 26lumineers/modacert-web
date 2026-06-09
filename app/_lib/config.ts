@@ -1,16 +1,20 @@
-const env = (key: string, fallback: string): string =>
-  process.env[key] || fallback;
+const userServiceUrl =
+  process.env.NEXT_PUBLIC_USER_SERVICE_URL || "http://localhost:3005";
+const paymentServiceUrl =
+  process.env.NEXT_PUBLIC_PAYMENT_SERVICE_URL || "http://localhost:3002";
+const paypalClientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || "";
+const paymentMode = process.env.NEXT_PUBLIC_PAYMENT_MODE || "paypal";
 
 export const config = {
   services: {
-    user: env("NEXT_PUBLIC_USER_SERVICE_URL", "http://localhost:3005"),
-    payment: env("NEXT_PUBLIC_PAYMENT_SERVICE_URL", "http://localhost:3002"),
+    user: userServiceUrl,
+    payment: paymentServiceUrl,
   },
   apiPrefix: "/api/v1",
   paypal: {
-    clientId: env("NEXT_PUBLIC_PAYPAL_CLIENT_ID", ""),
+    clientId: paypalClientId,
   },
-  paymentMode: env("NEXT_PUBLIC_PAYMENT_MODE", "paypal") as "fake" | "paypal",
+  paymentMode: paymentMode as "fake" | "paypal",
   endpoints: {
     auth: {
       login: "/auth/login",
