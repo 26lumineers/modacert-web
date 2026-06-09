@@ -1,11 +1,20 @@
-import axios from "axios";
+import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from "axios";
 import { clearAuth, getStoredToken } from "./auth";
 import { config } from "./config";
 
-const userApi = axios.create({ baseURL: `${config.services.user}${config.apiPrefix}` });
-const paymentApi = axios.create({ baseURL: `${config.services.payment}${config.apiPrefix}` });
+const userApi = axios.create({
+  baseURL: `${config.services.user}${config.apiPrefix}`,
+  timeout: config.api.timeoutMs,
+});
+const paymentApi = axios.create({
+  baseURL: `${config.services.payment}${config.apiPrefix}`,
+  timeout: config.api.timeoutMs,
+});
 
 type LoadingListener = (active: boolean) => void;
+type RetryableRequestConfig = InternalAxiosRequestConfig & {
+  _retryCount?: number;
+};
 
 let activeRequests = 0;
 let listeners: LoadingListener[] = [];
@@ -62,6 +71,34 @@ function redirectToSignIn() {
   window.location.href = "/signin";
 }
 
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableError(error: unknown): boolean {
+  if (!axios.isAxiosError(error)) return false;
+  const status = error.response?.status;
+  if (status !== undefined) {
+    return status === 408 || status === 429 || status >= 500;
+  }
+  return error.code === "ECONNABORTED" || error.code === "ERR_NETWORK" || !error.response;
+}
+
+async function retryRequest(api: AxiosInstance, error: unknown) {
+  if (!axios.isAxiosError(error) || !error.config || !isRetryableError(error)) {
+    return Promise.reject(error);
+  }
+
+  const requestConfig = error.config as RetryableRequestConfig;
+  const retryCount = requestConfig._retryCount || 0;
+  const maxRetries = Math.max(0, config.api.retryAttempts - 1);
+  if (retryCount >= maxRetries) return Promise.reject(error);
+
+  requestConfig._retryCount = retryCount + 1;
+  if (config.api.retryDelayMs > 0) await wait(config.api.retryDelayMs);
+  return api.request(requestConfig);
+}
+
 [userApi, paymentApi].forEach((api) => {
   api.interceptors.request.use((config) => {
     activeRequests++;
@@ -77,6 +114,7 @@ function redirectToSignIn() {
     (error) => {
       activeRequests = Math.max(0, activeRequests - 1);
       notifyListeners();
+      if (isRetryableError(error)) return retryRequest(api, error);
       if (isUnauthorizedError(error)) redirectToSignIn();
       return Promise.reject(error);
     },

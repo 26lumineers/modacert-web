@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
@@ -27,9 +27,12 @@ export default function SignInPage() {
   const [remember, setRemember] = useState(() => isRemembered());
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const submittingRef = useRef(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setLoading(true);
     setError("");
     try {
@@ -39,6 +42,7 @@ export default function SignInPage() {
     } catch (err) {
       setError(messageFromError(err));
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   }

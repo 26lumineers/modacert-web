@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, startTransition, useCallback, useEffect, useMemo, useState, useSyncExternalStore, ViewTransition } from "react";
+import { FormEvent, startTransition, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, ViewTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -42,37 +42,11 @@ type NfcMode = "with-nfc" | "without-nfc" | null;
 type BrandFilter = "all" | "street";
 
 const streetBrandNames = new Set(brandTiers.find((tier) => tier.label === "Street Brand")?.brands || []);
-const checkoutRetryAttempts = positiveInt(process.env.NEXT_PUBLIC_CHECKOUT_RETRY_ATTEMPTS, 3);
-const checkoutRetryWindowMs = positiveInt(process.env.NEXT_PUBLIC_CHECKOUT_RETRY_WINDOW_MS, 10000);
-const checkoutRetryDelayMs = checkoutRetryAttempts > 1 ? Math.floor(checkoutRetryWindowMs / (checkoutRetryAttempts - 1)) : 0;
-
-function positiveInt(value: string | undefined, fallback: number) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
-}
-
-function wait(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
 
 function isRetryableServiceError(err: unknown) {
   if (!axios.isAxiosError(err)) return true;
   if (!err.response) return true;
   return err.response.status === 429 || err.response.status >= 500;
-}
-
-async function withCheckoutRetry<T>(task: () => Promise<T>, shouldRetry = isRetryableServiceError): Promise<T> {
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= checkoutRetryAttempts; attempt += 1) {
-    try {
-      return await task();
-    } catch (err) {
-      lastError = err;
-      if (attempt >= checkoutRetryAttempts || !shouldRetry(err)) throw err;
-      if (checkoutRetryDelayMs > 0) await wait(checkoutRetryDelayMs);
-    }
-  }
-  throw lastError;
 }
 
 function useHydrated() {
@@ -156,6 +130,7 @@ export default function CheckoutPage() {
   const [password, setPassword] = useState("");
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [pendingHref, setPendingHref] = useState("/");
+  const loginSubmittingRef = useRef(false);
 
   const loadBrands = useCallback(async (force = false) => {
     if (!force && (brands.length > 0 || brandsLoading)) return;
@@ -163,7 +138,7 @@ export default function CheckoutPage() {
     setServiceError(null);
     setError("");
     try {
-      const data = await withCheckoutRetry(fetchBrands);
+      const data = await fetchBrands();
       setBrands(data.filter((brand) => brand.isActive !== false));
     } catch (err) {
       setBrands([]);
@@ -248,11 +223,13 @@ export default function CheckoutPage() {
 
   async function handleLogin(event: FormEvent) {
     event.preventDefault();
+    if (loginSubmittingRef.current) return;
+    loginSubmittingRef.current = true;
     setLoading(true);
     setError("");
     setServiceError(null);
     try {
-      const response = await withCheckoutRetry(() => login(email, password));
+      const response = await login(email, password);
       setToken(response.accessToken);
       setUser(response.user);
       saveAuth(response.accessToken, response.user, false);
@@ -265,6 +242,7 @@ export default function CheckoutPage() {
         setError(errorMessage(err, "Sign in failed."));
       }
     } finally {
+      loginSubmittingRef.current = false;
       setLoading(false);
     }
   }
@@ -310,13 +288,13 @@ export default function CheckoutPage() {
         photoTypes.push(field.key);
         contentTypes[field.key] = file.type || "image/jpeg";
       }
-      const presign = await withCheckoutRetry(() => requestPresignUrls({
+      const presign = await requestPresignUrls({
         brand: brandName,
         model: selectedCategory,
         photoTypes,
         contentTypes,
         nfcData: nfcMode,
-      }));
+      });
       const uploadedKeys: Record<string, string> = {};
       await Promise.all(
         presign.uploadUrls.map(async ({ photoType, uploadUrl, key }) => {
@@ -326,7 +304,7 @@ export default function CheckoutPage() {
           uploadedKeys[photoType] = key;
         }),
       );
-      await withCheckoutRetry(() => confirmUpload(presign.requestId, uploadedKeys));
+      await confirmUpload(presign.requestId, uploadedKeys);
       setRequestId(presign.requestId);
       goTo("payment");
     } catch {
@@ -343,7 +321,7 @@ export default function CheckoutPage() {
     setError("");
     setServiceError(null);
     try {
-      const order = await withCheckoutRetry(() => createPayPalOrder({
+      const order = await createPayPalOrder({
         amount: selectedAmount,
         currency: "USD",
         referenceId: requestId,
@@ -351,8 +329,8 @@ export default function CheckoutPage() {
         itemDescription: `ModaCert authentication service for ${brandName}`,
         itemQuantity: 1,
         itemPrice: selectedAmount,
-      }));
-      await withCheckoutRetry(() => capturePayPalOrder({ orderId: order.orderId, referenceId: requestId }));
+      });
+      await capturePayPalOrder({ orderId: order.orderId, referenceId: requestId });
       goTo("done");
     } catch {
       setServiceError("payment-service");
@@ -364,7 +342,7 @@ export default function CheckoutPage() {
 
   const handlePayPalCreateOrder = useCallback(async () => {
     if (!brandName || !requestId) throw new Error("Missing checkout request.");
-    const order = await withCheckoutRetry(() => createPayPalOrder({
+    const order = await createPayPalOrder({
       amount: selectedAmount,
       currency: "USD",
       referenceId: requestId,
@@ -374,7 +352,7 @@ export default function CheckoutPage() {
       itemPrice: selectedAmount,
       returnUrl: typeof window !== "undefined" ? `${window.location.origin}/checkout` : undefined,
       cancelUrl: typeof window !== "undefined" ? `${window.location.origin}/checkout` : undefined,
-    }));
+    });
     return order.orderId;
   }, [brandName, requestId, selectedAmount]);
 
@@ -382,7 +360,7 @@ export default function CheckoutPage() {
     async (data: { orderID: string }) => {
       if (!requestId) return;
       try {
-        await withCheckoutRetry(() => capturePayPalOrder({ orderId: data.orderID, referenceId: requestId }));
+        await capturePayPalOrder({ orderId: data.orderID, referenceId: requestId });
         goTo("done");
       } catch {
         setServiceError("payment-service");

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -47,6 +47,7 @@ export default function SignUpPage() {
   const [form, setForm] = useState<SignUpForm>(initialForm);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const submittingRef = useRef(false);
 
   function updateField(key: keyof SignUpForm, value: string) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -58,6 +59,7 @@ export default function SignUpPage() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (submittingRef.current) return;
     setError("");
 
     if (form.password.length < 8 || form.password.length > 20) {
@@ -70,6 +72,7 @@ export default function SignUpPage() {
       return;
     }
 
+    submittingRef.current = true;
     setLoading(true);
     try {
       const response = await register({ ...form });
@@ -82,6 +85,7 @@ export default function SignUpPage() {
     } catch (err) {
       setError(messageFromError(err));
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   }
