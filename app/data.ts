@@ -21,8 +21,20 @@ export type WhyItem = {
   image: string;
 };
 
+export type CheckoutPhotoKey =
+  | "front"
+  | "back"
+  | "left"
+  | "right"
+  | "top"
+  | "bottom"
+  | "interior"
+  | "label_tag"
+  | "serial_number"
+  | "logo";
+
 export type PhotoSlot = {
-  key: string;
+  key: CheckoutPhotoKey;
   label: string;
   description: string;
   image: string;
@@ -189,33 +201,71 @@ export const brands = [
   "Other brands",
 ] as const;
 
+export const acceptedPhotoMimeTypes = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+] as const;
+
+export const acceptedPhotoInputTypes = acceptedPhotoMimeTypes.join(",");
+
 export const checkoutPhotoSlots: PhotoSlot[] = [
   {
     key: "front",
-    label: "Main photo",
-    description: "Full item visible with clear lighting",
+    label: "Front view",
+    description: "Full front side visible with clear lighting",
     image: "/figma/step-bag.png",
     required: true,
   },
   {
-    key: "logo",
-    label: "Brand Logo",
-    description: "Logo stamp, print, or embossing",
-    image: "/figma/why-expert-bag.png",
+    key: "back",
+    label: "Back view",
+    description: "Full back side visible with clear lighting",
+    image: "/figma/category-handbag.png",
+    required: true,
+  },
+  {
+    key: "left",
+    label: "Left side",
+    description: "Left side profile and edge details",
+    image: "/figma/rate-lv-bag.png",
+    required: true,
+  },
+  {
+    key: "right",
+    label: "Right side",
+    description: "Right side profile and edge details",
+    image: "/figma/rate-chanel-bag.png",
+    required: true,
+  },
+  {
+    key: "top",
+    label: "Top view",
+    description: "Top opening, handles, and upper construction",
+    image: "/figma/rate-hermes-birkin.png",
+    required: true,
+  },
+  {
+    key: "bottom",
+    label: "Bottom view",
+    description: "Base, feet, soles, or lower construction",
+    image: "/figma/rate-hermes-orange-bag.png",
     required: true,
   },
   {
     key: "interior",
-    label: "Inside label",
-    description: "Interior label and tags",
+    label: "Interior view",
+    description: "Inside lining, pockets, and inner construction",
     image: "/figma/step-expert.png",
     required: true,
   },
   {
-    key: "back",
-    label: "Hardware engravings",
-    description: "Metal hardware, stamps, or engraved markings",
-    image: "/figma/category-handbag.png",
+    key: "label_tag",
+    label: "Label/tag",
+    description: "Care label, size tag, or country of origin tag",
+    image: "/figma/category-clothing.png",
     required: true,
   },
   {
@@ -223,42 +273,14 @@ export const checkoutPhotoSlots: PhotoSlot[] = [
     label: "Serial number",
     description: "Date code, serial, or product code clearly shown",
     image: "/figma/why-payment-card.png",
-    required: false,
+    required: true,
   },
   {
-    key: "label_tag",
-    label: "Made in label",
-    description: "Country of origin and factory label",
-    image: "/figma/category-clothing.png",
-    required: false,
-  },
-  {
-    key: "qr_code_label",
-    label: "QR code label",
-    description: "QR, NFC, or scannable authenticity label",
-    image: "/figma/category-jewelry.png",
-    required: false,
-  },
-  {
-    key: "zipper_head",
-    label: "Zipper head (front)",
-    description: "Front zipper pull and finish details",
-    image: "/figma/category-sneaker.png",
-    required: false,
-  },
-  {
-    key: "strap_clasp",
-    label: "Shoulder strap clasp",
-    description: "Clasp, hook, strap, or attachment detail",
-    image: "/figma/step-certificate.png",
-    required: false,
-  },
-  {
-    key: "additional",
-    label: "Additional photos",
-    description: "Any extra proof, flaw, receipt, or detail angle",
-    image: "/figma/cta-bag.png",
-    required: false,
+    key: "logo",
+    label: "Brand logo",
+    description: "Logo stamp, print, embossing, or hardware logo",
+    image: "/figma/why-expert-bag.png",
+    required: true,
   },
 ];
 

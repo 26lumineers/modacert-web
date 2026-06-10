@@ -21,7 +21,7 @@ import {
 import { config } from "../_lib/config";
 import { clearAuth, getStoredToken, getStoredUser, saveAuth, type AuthUser } from "../_lib/auth";
 import { FloatingChatWidget, NavMenuMark, cx, navCtaClass, navHeaderClass, navMenuClass, navPillClass } from "../components";
-import { brandTiers, categories, checkoutPhotoSlots, figma } from "../data";
+import { acceptedPhotoInputTypes, acceptedPhotoMimeTypes, brandTiers, categories, checkoutPhotoSlots, figma } from "../data";
 
 const PAYPAL_CLIENT_ID = config.paypal.clientId;
 
@@ -42,6 +42,7 @@ type NfcMode = "with-nfc" | "without-nfc" | null;
 type BrandFilter = "all" | "street";
 
 const streetBrandNames = new Set(brandTiers.find((tier) => tier.label === "Street Brand")?.brands || []);
+const acceptedPhotoMimeTypeSet = new Set<string>(acceptedPhotoMimeTypes);
 
 function isRetryableServiceError(err: unknown) {
   if (!axios.isAxiosError(err)) return true;
@@ -280,6 +281,19 @@ export default function CheckoutPage() {
     setError("");
     setServiceError(null);
     try {
+      const missingField = checkoutPhotoSlots.find((field) => !photos[field.key]);
+      if (missingField) {
+        throw new Error(`Please upload ${missingField.label}.`);
+      }
+
+      const invalidField = checkoutPhotoSlots.find((field) => {
+        const file = photos[field.key];
+        return file && !acceptedPhotoMimeTypeSet.has(file.type || "image/jpeg");
+      });
+      if (invalidField) {
+        throw new Error(`${invalidField.label} must be a JPEG, PNG, WebP, HEIC, or HEIF image.`);
+      }
+
       const photoTypes: string[] = [];
       const contentTypes: Record<string, string> = {};
       for (const field of checkoutPhotoSlots) {
@@ -307,9 +321,9 @@ export default function CheckoutPage() {
       await confirmUpload(presign.requestId, uploadedKeys);
       setRequestId(presign.requestId);
       goTo("payment");
-    } catch {
+    } catch (err) {
       setServiceError("upload-service");
-      setError("Upload is unavailable right now.");
+      setError(errorMessage(err, "Upload is unavailable right now."));
     } finally {
       setLoading(false);
     }
@@ -730,7 +744,7 @@ function UploadStep({ brandName, selectedCategory, nfcMode, photos, loading, can
               {field.required ? <span className="rounded-full bg-mc-orange/10 px-2 py-1 text-[10px] font-bold uppercase text-mc-orange-dark">Required</span> : null}
             </div>
             <label className="mt-4 block cursor-pointer rounded-full border border-dashed border-mc-orange/45 bg-mc-orange/5 px-4 py-3 text-center text-sm font-bold text-mc-orange hover:bg-mc-orange/10">
-              <input type="file" accept="image/*" onChange={(event) => onPhotoChange(field.key, event.target.files?.[0] || null)} className="sr-only" />
+              <input type="file" accept={acceptedPhotoInputTypes} onChange={(event) => onPhotoChange(field.key, event.target.files?.[0] || null)} className="sr-only" />
               {photos[field.key]?.name ? photos[field.key]?.name.slice(0, 34) : "Upload photo"}
             </label>
           </article>
