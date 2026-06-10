@@ -1,7 +1,13 @@
+const apiPrefix = "/api/v1";
+const apiMode = process.env.NEXT_PUBLIC_API_MODE === "proxy" ? "proxy" : "direct";
 const userServiceUrl =
-  process.env.NEXT_PUBLIC_USER_SERVICE_URL || "http://localhost:3005";
+  apiMode === "proxy"
+    ? ""
+    : process.env.NEXT_PUBLIC_USER_SERVICE_URL || "http://localhost:3005";
 const paymentServiceUrl =
-  process.env.NEXT_PUBLIC_PAYMENT_SERVICE_URL || "http://localhost:3002";
+  apiMode === "proxy"
+    ? ""
+    : process.env.NEXT_PUBLIC_PAYMENT_SERVICE_URL || "http://localhost:3002";
 const paypalClientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || "";
 const paymentMode = process.env.NEXT_PUBLIC_PAYMENT_MODE || "paypal";
 const apiTimeoutMs = positiveInt(process.env.NEXT_PUBLIC_API_TIMEOUT_MS, 10000);
@@ -23,7 +29,8 @@ export const config = {
     retryAttempts: apiRetryAttempts,
     retryDelayMs: apiRetryDelayMs,
   },
-  apiPrefix: "/api/v1",
+  apiPrefix,
+  apiMode,
   paypal: {
     clientId: paypalClientId,
   },
