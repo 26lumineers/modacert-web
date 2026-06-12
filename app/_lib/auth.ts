@@ -10,6 +10,10 @@ export interface AuthUser {
   fullName: string;
   email: string;
   role: string;
+  phone?: string | null;
+  country?: string | null;
+  countryCode?: string | null;
+  avatarUrl?: string | null;
 }
 
 function readFrom(storage: Storage, key: string): string | null {

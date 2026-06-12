@@ -4,7 +4,7 @@ import { FormEvent, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
-import { login } from "../_lib/api";
+import { getGoogleAuthUrl, login } from "../_lib/api";
 import { saveAuth, getStoredEmail, isRemembered } from "../_lib/auth";
 import { AuthDivider, AuthField, AuthHeading, AuthPrimaryButton, AuthShell, GoogleButton } from "../auth-ui";
 
@@ -27,6 +27,7 @@ export default function SignInPage() {
   const [remember, setRemember] = useState(() => isRemembered());
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const submittingRef = useRef(false);
 
   async function handleSubmit(event: FormEvent) {
@@ -44,6 +45,19 @@ export default function SignInPage() {
     } finally {
       submittingRef.current = false;
       setLoading(false);
+    }
+  }
+
+  async function handleGoogleAuth() {
+    if (googleLoading) return;
+    setGoogleLoading(true);
+    setError("");
+    try {
+      const url = await getGoogleAuthUrl();
+      window.location.href = url;
+    } catch (err) {
+      setError(messageFromError(err));
+      setGoogleLoading(false);
     }
   }
 
@@ -76,7 +90,7 @@ export default function SignInPage() {
           </Link>
         </p>
         <AuthDivider />
-        <GoogleButton />
+        <GoogleButton onClick={handleGoogleAuth} loading={googleLoading} />
       </form>
     </AuthShell>
   );

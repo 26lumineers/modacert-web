@@ -1,5 +1,5 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from "axios";
-import { clearAuth, getStoredToken } from "./auth";
+import { clearAuth, getStoredToken, type AuthUser } from "./auth";
 import { config } from "./config";
 
 const userApi = axios.create({
@@ -156,7 +156,31 @@ export interface Model {
 
 export interface LoginResponse {
   accessToken: string;
-  user: { id: string; fullName: string; email: string; role: string };
+  user: AuthUser;
+}
+
+type AuthResponseData = {
+  data?: {
+    tokens?: { accessToken?: string };
+    accessToken?: string;
+    token?: string;
+    user?: AuthUser;
+  };
+  accessToken?: string;
+  token?: string;
+  user?: AuthUser;
+};
+
+function parseAuthResponse(data: AuthResponseData): LoginResponse {
+  const token =
+    data?.data?.tokens?.accessToken ||
+    data?.data?.accessToken ||
+    data?.accessToken ||
+    data?.token;
+  const user = data?.data?.user || data?.user;
+  if (!token || !user) throw new Error("No token in response");
+  setAuthToken(token);
+  return { accessToken: token, user };
 }
 
 export interface RegisterPayload {
@@ -175,25 +199,16 @@ export async function login(
   password: string
 ): Promise<LoginResponse> {
   const { data } = await userApi.post(config.endpoints.auth.login, { email, password });
-  const token =
-    data?.data?.tokens?.accessToken || data?.accessToken || data?.token;
-  const user = data?.data?.user || data?.user;
-  if (!token) throw new Error("No token in response");
-  setAuthToken(token);
-  return { accessToken: token, user };
+  return parseAuthResponse(data);
 }
 
 export async function register(
   payload: RegisterPayload
 ): Promise<LoginResponse | { success: true }> {
   const { data } = await userApi.post(config.endpoints.auth.register, payload);
-  const token =
-    data?.data?.tokens?.accessToken || data?.accessToken || data?.token;
-  const user = data?.data?.user || data?.user;
 
-  if (token && user) {
-    setAuthToken(token);
-    return { accessToken: token, user };
+  if (data?.data?.tokens?.accessToken || data?.accessToken || data?.token) {
+    return parseAuthResponse(data);
   }
 
   if (data?.success === false) {
@@ -201,6 +216,18 @@ export async function register(
   }
 
   return { success: true };
+}
+
+export async function getGoogleAuthUrl(): Promise<string> {
+  const { data } = await userApi.get(config.endpoints.auth.google);
+  const url = data?.data?.url || data?.url;
+  if (!url) throw new Error("No Google auth URL in response");
+  return url;
+}
+
+export async function exchangeGoogleCode(code: string): Promise<LoginResponse> {
+  const { data } = await userApi.post(config.endpoints.auth.googleCallback, { code });
+  return parseAuthResponse(data);
 }
 
 export async function fetchBrands(): Promise<Brand[]> {

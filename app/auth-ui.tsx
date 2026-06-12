@@ -156,11 +156,26 @@ export function AuthDivider() {
   );
 }
 
-export function GoogleButton({ children = "Sign in With Google", className = "" }: { children?: React.ReactNode; className?: string }) {
+export function GoogleButton({
+  children = "Sign in With Google",
+  className = "",
+  loading = false,
+  onClick,
+}: {
+  children?: React.ReactNode;
+  className?: string;
+  loading?: boolean;
+  onClick?: () => void;
+}) {
   return (
-    <button type="button" className={`flex h-[65px] w-full items-center justify-center gap-5 rounded-[10px] bg-white text-xl text-mc-ink shadow-auth-google ${className}`}>
+    <button
+      type="button"
+      disabled={loading}
+      onClick={onClick}
+      className={`flex h-[65px] w-full items-center justify-center gap-5 rounded-[10px] bg-white text-xl text-mc-ink shadow-auth-google disabled:opacity-55 ${className}`}
+    >
       <Image src={figma.google} alt="" width={40} height={40} sizes="40px" className="object-contain" />
-      {children}
+      {loading ? "Connecting to Google" : children}
     </button>
   );
 }

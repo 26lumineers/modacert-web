@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
-import { register } from "../_lib/api";
+import { getGoogleAuthUrl, register } from "../_lib/api";
 import { saveAuth } from "../_lib/auth";
 import { countries, type CountryDialCode } from "../_lib/countries";
 import { AuthDivider, AuthField, AuthHeading, AuthPrimaryButton, AuthShell, GoogleButton } from "../auth-ui";
@@ -47,6 +47,7 @@ export default function SignUpPage() {
   const [form, setForm] = useState<SignUpForm>(initialForm);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const submittingRef = useRef(false);
 
   function updateField(key: keyof SignUpForm, value: string) {
@@ -90,11 +91,26 @@ export default function SignUpPage() {
     }
   }
 
+  async function handleGoogleAuth() {
+    if (googleLoading) return;
+    setGoogleLoading(true);
+    setError("");
+    try {
+      const url = await getGoogleAuthUrl();
+      window.location.href = url;
+    } catch (err) {
+      setError(messageFromError(err));
+      setGoogleLoading(false);
+    }
+  }
+
   return (
     <AuthShell switchHref="/signin" switchLabel="Sign in" imageHeight="min-h-[820px]">
       <form onSubmit={handleSubmit} className="relative z-10 w-full max-w-[430px]">
         <AuthHeading title="Sign up" description="Please enter your details to sign up" />
-        <GoogleButton className="mt-5" />
+        <GoogleButton className="mt-5" onClick={handleGoogleAuth} loading={googleLoading}>
+          Sign up With Google
+        </GoogleButton>
         <AuthDivider />
         <div className="grid gap-4 sm:grid-cols-2">
           <AuthField id="first-name" label="First name" value={form.firstName} onChange={(value) => updateField("firstName", value)} autoComplete="given-name" />
