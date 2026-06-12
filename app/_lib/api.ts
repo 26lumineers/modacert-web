@@ -16,6 +16,13 @@ type RetryableRequestConfig = InternalAxiosRequestConfig & {
   _retryCount?: number;
 };
 
+const authEntryEndpoints: ReadonlySet<string> = new Set([
+  config.endpoints.auth.login,
+  config.endpoints.auth.google,
+  config.endpoints.auth.googleCallback,
+  config.endpoints.auth.googleLogin,
+]);
+
 let activeRequests = 0;
 let listeners: LoadingListener[] = [];
 
@@ -84,8 +91,14 @@ function isRetryableError(error: unknown): boolean {
   return error.code === "ECONNABORTED" || error.code === "ERR_NETWORK" || !error.response;
 }
 
+function isAuthEntryRequest(url: string | undefined): boolean {
+  if (!url) return false;
+  const path = new URL(url, "http://local").pathname;
+  return authEntryEndpoints.has(path) || [...authEntryEndpoints].some((endpoint) => path === `${config.apiPrefix}${endpoint}`);
+}
+
 async function retryRequest(api: AxiosInstance, error: unknown) {
-  if (!axios.isAxiosError(error) || !error.config || !isRetryableError(error)) {
+  if (!axios.isAxiosError(error) || !error.config || !isRetryableError(error) || isAuthEntryRequest(error.config.url)) {
     return Promise.reject(error);
   }
 
