@@ -54,6 +54,7 @@ app/
 | `NEXT_PUBLIC_USER_SERVICE_URL` | `http://localhost:3005` | User/auth/brand/upload backend |
 | `NEXT_PUBLIC_PAYMENT_SERVICE_URL` | `http://localhost:3002` | PayPal payment backend |
 | `NEXT_PUBLIC_PAYPAL_CLIENT_ID` | `A...` | PayPal sandbox client ID |
+| `NEXT_PUBLIC_PAYMENT_MODE` | `paypal` | Frontend payment UI mode: `paypal` renders PayPal Buttons, `fake` renders the local fake pay button |
 
 ---
 
@@ -167,7 +168,9 @@ paymentApi ┘
 1. **Auth** — POST `/auth/login` → store token & user
 2. **Brand** — GET `/brands` → user picks one (price shown)
 3. **Upload** — POST `/upload/presign` → PUT to S3 → POST `/upload/confirm`
-4. **Payment** — PayPal Buttons widget → `createPayPalOrder` → `capturePayPalOrder`
+4. **Payment** — PayPal Buttons widget → `createPayPalOrder` → user approves in PayPal → `capturePayPalOrder`
+
+Real PayPal mode does not use a payment-service webhook callback. The browser PayPal Buttons `onApprove` handler calls payment-service `/payments/paypal/capture` after the buyer approves the order.
 
 Required photos: `front`, `back`, `interior`, `logo`. Optional: `left`, `right`, `top`, `bottom`, `label_tag`, `serial_number`.
 
@@ -188,19 +191,29 @@ Required photos: `front`, `back`, `interior`, `logo`. Optional: `left`, `right`,
 
 - **Zombie Bun processes**: Kill stale `bun` processes before starting services (`pkill -f "bun.*main.ts"`). Multiple processes can bind port 3005 → `CONNECTION_ENDED` errors.
 - **S3 uploads bypass interceptors**: `uploadToPresignedUrl()` uses native `fetch`, not Axios — no loading overlay for direct S3 PUTs.
+- **Payment create-order 500**: A fast `500` from `/payments/paypal/create-order` usually means payment-service is in real PayPal mode but missing runtime PayPal config such as `PAYPAL_CLIENT_SECRET`. This is payment-service runtime env, not a frontend callback bug.
 
 ---
 
 ## Fake Payment Mode
 
-Set `NEXT_PUBLIC_PAYMENT_MODE=fake` in `.env.local` to skip PayPal entirely during development.
+There are two separate payment-mode knobs:
 
-When `PAYMENT_MODE=fake`:
-- The checkout page shows a "Pay ${price} Now" button instead of PayPal Buttons
-- Clicking the button calls `createPayPalOrder()` then `capturePayPalOrder()` against the payment-service
-- The payment-service `FakePayPalService` returns deterministic fake responses — no PayPal API calls
-- Both fake and real modes publish `payment.completed` to SQS, so downstream processing is identical
-- Set `NEXT_PUBLIC_PAYMENT_MODE=paypal` (or remove it) to use real PayPal
+- `NEXT_PUBLIC_PAYMENT_MODE` in this repo controls the checkout UI.
+- `PAYMENT_MODE` in payment-service controls the backend provider.
+
+Use matching modes:
+
+- Real PayPal: set `NEXT_PUBLIC_PAYMENT_MODE=paypal` in this repo and `PAYMENT_MODE=paypal` plus PayPal credentials in payment-service.
+- Fake checkout: set `NEXT_PUBLIC_PAYMENT_MODE=fake` in this repo and `PAYMENT_MODE=fake` in payment-service.
+
+When this repo is `fake`, the checkout page shows a "Pay ${price} Now" button instead of PayPal Buttons. That button still calls `createPayPalOrder()` then `capturePayPalOrder()` against payment-service, so payment-service must also be fake if you want deterministic fake responses and no PayPal API calls.
+
+Do not run this repo in fake mode against a real PayPal payment-service. The fake button has no PayPal buyer approval step, so immediate capture cannot satisfy a real PayPal order flow.
+
+Both fake and real backend modes publish `payment.completed` to SQS after successful capture, so downstream processing stays identical when payment-service is configured correctly.
+
+The route names stay `/payments/paypal/create-order` and `/payments/paypal/capture` in both modes. Route names do not prove whether payment-service is using `FakePayPalService` or real `PayPalService`.
 
 The `PAYMENT_MODE` constant is exported from `app/_lib/api.ts`.
 
