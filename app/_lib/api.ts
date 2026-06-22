@@ -337,7 +337,7 @@ export async function createPayPalOrder(
 export async function capturePayPalOrder(payload: {
   orderId: string;
   referenceId: string;
-}): Promise<{ status: string; paypalStatus: string }> {
+}): Promise<{ status: string; paypalStatus: string; queued?: boolean; queueMessageId?: string }> {
   const { data } = await paymentApi.post(
     config.endpoints.payments.paypal.capture,
     payload

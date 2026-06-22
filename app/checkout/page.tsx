@@ -67,14 +67,6 @@ function priceText(price: string | undefined) {
   return `$${priceAmount(price)}`;
 }
 
-function amountNumber(price: string | undefined) {
-  return Number(priceAmount(price)) || 20;
-}
-
-function money(value: number) {
-  return `$${value.toFixed(value % 1 === 0 ? 0 : 2)}`;
-}
-
 function errorMessage(err: unknown, fallback: string) {
   if (axios.isAxiosError(err)) {
     const data = err.response?.data;
@@ -822,48 +814,49 @@ function PaymentStep({ brandName, requestId, amount, loading, onBack, onFakePaym
 }
 
 function DoneStep({ requestId, brandName, selectedCategory, amount }: { requestId: string | null; brandName: string; selectedCategory: string; amount: string }) {
-  const subtotal = amountNumber(amount);
-  const shipping = 0;
-  const tax = Number((subtotal * 0.095).toFixed(2));
-  const total = subtotal + shipping + tax;
-  const orderNumber = requestId ? requestId.slice(-6).toUpperCase().padStart(6, "0") : "000001";
-  const trackingNumber = requestId ? requestId.replace(/[^0-9]/g, "").slice(-9).padStart(9, "0") : "447164523";
-
   return (
     <section className="mx-auto max-w-6xl">
-      <div className="rounded-[2rem] bg-white p-5 shadow-auth-panel lg:rounded-[50px] lg:p-8">
-        <div className="flex flex-col gap-4 border-b border-mc-muted pb-6 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            <span className="grid h-16 w-16 place-items-center rounded-full bg-mc-orange/10 text-3xl font-bold text-mc-orange">✓</span>
-            <div>
-              <p className="text-sm font-bold text-mc-ink/45">Order #{orderNumber}</p>
-              <h2 className="font-auth text-5xl leading-none text-mc-ink">Payment Success</h2>
+      <div className="overflow-hidden rounded-[2rem] bg-white shadow-auth-panel lg:rounded-[50px]">
+        <div className="grid gap-0 lg:grid-cols-[0.95fr_1.05fr]">
+          <div className="relative min-h-[360px] overflow-hidden bg-figma-rate p-6 text-white sm:p-8 lg:min-h-[520px] lg:rounded-l-[50px]">
+            <Image src={figma.ctaBag} alt="" fill sizes="(min-width: 1024px) 42vw, 90vw" className="object-contain object-right-bottom opacity-95" />
+            <div className="absolute inset-0 bg-gradient-to-r from-mc-ink/84 via-mc-ink/48 to-mc-ink/10" />
+            <div className="relative flex min-h-[300px] flex-col justify-between lg:min-h-[456px]">
+              <span className="grid h-16 w-16 place-items-center rounded-full bg-white text-3xl font-bold text-mc-orange">✓</span>
+              <div>
+                <p className="font-auth text-xl text-mc-orange">Request submitted</p>
+                <h2 className="mt-3 max-w-md font-auth text-5xl leading-none text-white sm:text-6xl">Thank you for your order</h2>
+                <p className="mt-4 max-w-sm text-sm leading-6 text-white/76">Your payment is complete. ModaCert will review your submitted photos and prepare your authentication result.</p>
+              </div>
             </div>
           </div>
-          <Link href="/" transitionTypes={["nav-back"]} className="inline-flex justify-center rounded-full bg-mc-orange px-8 py-3 text-sm font-bold text-white shadow-orange hover:bg-mc-orange-dark">
-            Back to Home
-          </Link>
-        </div>
-        <div className="mt-8 rounded-[1.3rem] bg-mc-soft p-5 shadow-auth-google">
-          <h3 className="font-auth text-4xl">Your Order</h3>
-          <div className="mt-5 grid gap-5 border-b border-mc-muted pb-6 lg:grid-cols-[140px_1fr_auto] lg:items-center">
-            <div className="relative aspect-square overflow-hidden rounded-[1rem] bg-white">
-              <Image src={figma.ctaBag} alt="" fill sizes="140px" className="object-contain p-3" />
+          <div className="self-center p-5 sm:p-8">
+            <div className="rounded-[1.4rem] bg-mc-soft p-5 shadow-auth-google">
+              <h3 className="font-auth text-4xl leading-none text-mc-ink">Order details</h3>
+              <div className="mt-6 grid gap-5 border-b border-mc-muted pb-6 sm:grid-cols-[112px_1fr] sm:items-center">
+                <div className="relative aspect-square overflow-hidden rounded-[1rem] bg-white">
+                  <Image src={figma.ctaBag} alt="" fill sizes="112px" className="object-contain p-3" />
+                </div>
+                <div>
+                  <p className="text-xl font-bold">{selectedCategory || "Item"} authentication</p>
+                  <p className="mt-2 text-sm text-mc-ink/62">Brand: {brandName || "Not available"}</p>
+                  <p className="mt-1 text-sm text-mc-ink/62">Status: Submitted for expert review</p>
+                </div>
+              </div>
+              <dl className="mt-5 grid gap-3 text-sm">
+                <DetailRow label="Paid amount" value={`${amount} USD`} strong />
+                {requestId ? <DetailRow label="Request ID" value={requestId} /> : null}
+              </dl>
             </div>
-            <div>
-              <p className="text-xl font-bold">{selectedCategory || "Item"} Authenticate</p>
-              <p className="mt-2 text-sm text-mc-ink/62">Brand: {brandName || "Not available"}</p>
-              <p className="mt-1 text-sm text-mc-ink/62">Moda Track Number: {trackingNumber}</p>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <Link href="/" transitionTypes={["nav-back"]} className="inline-flex min-h-12 flex-1 items-center justify-center rounded-full bg-mc-orange px-8 py-3 text-sm font-bold text-white shadow-orange hover:bg-mc-orange-dark">
+                Go to homepage
+              </Link>
+              <button type="button" onClick={() => undefined} className="inline-flex min-h-12 flex-1 items-center justify-center rounded-full border border-mc-muted bg-white px-8 py-3 text-sm font-bold text-mc-ink hover:bg-mc-soft">
+                Stay here
+              </button>
             </div>
-            <p className="text-2xl font-bold text-mc-orange">{money(subtotal)}</p>
           </div>
-          <dl className="mt-5 grid gap-3 text-sm">
-            <DetailRow label="Subtotal" value={money(subtotal)} />
-            <DetailRow label="Shipping" value={money(shipping)} />
-            <DetailRow label="Tax" value={money(tax)} />
-            <DetailRow label="Total" value={`${money(total)} USD`} strong />
-            {requestId ? <DetailRow label="Request ID" value={requestId} /> : null}
-          </dl>
         </div>
       </div>
     </section>
