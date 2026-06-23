@@ -17,6 +17,7 @@ import {
   setAuthToken,
   uploadToPresignedUrl,
   type Brand,
+  type CreateOrderPayload,
 } from "../_lib/api";
 import { config } from "../_lib/config";
 import { clearAuth, getStoredToken, getStoredUser, saveAuth, type AuthUser } from "../_lib/auth";
@@ -321,13 +322,15 @@ export default function CheckoutPage() {
     }
   }
 
-  async function handleFakePayment() {
-    if (!brandName || !requestId) return;
-    setLoading(true);
-    setError("");
-    setServiceError(null);
-    try {
-      const order = await createPayPalOrder({
+  const paymentFail = useCallback(() => {
+    setServiceError("payment-service");
+    setError("Payment is unavailable right now.");
+  }, []);
+
+  const buildCreateOrderPayload = useCallback(
+    (withApprovalUrls: boolean): CreateOrderPayload => {
+      if (!brandName || !requestId) throw new Error("Missing checkout request.");
+      const base: CreateOrderPayload = {
         amount: selectedAmount,
         currency: "USD",
         referenceId: requestId,
@@ -335,12 +338,29 @@ export default function CheckoutPage() {
         itemDescription: `ModaCert authentication service for ${brandName}`,
         itemQuantity: 1,
         itemPrice: selectedAmount,
-      });
+      };
+      if (!withApprovalUrls) return base;
+      const origin = typeof window !== "undefined" ? window.location.origin : undefined;
+      return {
+        ...base,
+        returnUrl: origin ? `${origin}/checkout` : undefined,
+        cancelUrl: origin ? `${origin}/checkout` : undefined,
+      };
+    },
+    [brandName, requestId, selectedAmount],
+  );
+
+  async function handleFakePayment() {
+    if (!brandName || !requestId) return;
+    setLoading(true);
+    setError("");
+    setServiceError(null);
+    try {
+      const order = await createPayPalOrder(buildCreateOrderPayload(false));
       await capturePayPalOrder({ orderId: order.orderId, referenceId: requestId });
       goTo("done");
     } catch {
-      setServiceError("payment-service");
-      setError("Payment is unavailable right now.");
+      paymentFail();
     } finally {
       setLoading(false);
     }
@@ -348,32 +368,28 @@ export default function CheckoutPage() {
 
   const handlePayPalCreateOrder = useCallback(async () => {
     if (!brandName || !requestId) throw new Error("Missing checkout request.");
-    const order = await createPayPalOrder({
-      amount: selectedAmount,
-      currency: "USD",
-      referenceId: requestId,
-      itemName: `${brandName} Authentication`,
-      itemDescription: `ModaCert authentication service for ${brandName}`,
-      itemQuantity: 1,
-      itemPrice: selectedAmount,
-      returnUrl: typeof window !== "undefined" ? `${window.location.origin}/checkout` : undefined,
-      cancelUrl: typeof window !== "undefined" ? `${window.location.origin}/checkout` : undefined,
-    });
+    setError("");
+    setServiceError(null);
+    const order = await createPayPalOrder(buildCreateOrderPayload(true));
     return order.orderId;
-  }, [brandName, requestId, selectedAmount]);
+  }, [brandName, requestId, buildCreateOrderPayload]);
 
   const handlePayPalApprove = useCallback(
     async (data: { orderID: string }) => {
       if (!requestId) return;
+      setLoading(true);
+      setError("");
+      setServiceError(null);
       try {
         await capturePayPalOrder({ orderId: data.orderID, referenceId: requestId });
         goTo("done");
       } catch {
-        setServiceError("payment-service");
-        setError("Payment is unavailable right now.");
+        paymentFail();
+      } finally {
+        setLoading(false);
       }
     },
-    [goTo, requestId],
+    [goTo, requestId, paymentFail],
   );
 
   if (!hydrated) {
