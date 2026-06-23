@@ -54,7 +54,7 @@ app/
 | `NEXT_PUBLIC_USER_SERVICE_URL` | `http://localhost:3005` | User/auth/brand/upload backend |
 | `NEXT_PUBLIC_PAYMENT_SERVICE_URL` | `http://localhost:3002` | PayPal payment backend |
 | `NEXT_PUBLIC_PAYPAL_CLIENT_ID` | `A...` | PayPal sandbox client ID |
-| `NEXT_PUBLIC_PAYMENT_MODE` | `paypal` | Frontend payment UI mode: `paypal` renders PayPal Buttons, `fake` renders the local fake pay button |
+| `NEXT_PUBLIC_PAYMENT_MODE` | `fake` | Frontend payment UI mode: `paypal` renders PayPal Buttons, `fake` renders the local fake pay button |
 
 ---
 
@@ -207,7 +207,7 @@ Use matching modes:
 - Real PayPal: set `NEXT_PUBLIC_PAYMENT_MODE=paypal` in this repo and `PAYMENT_MODE=paypal` plus PayPal credentials in payment-service.
 - Fake checkout: set `NEXT_PUBLIC_PAYMENT_MODE=fake` in this repo and `PAYMENT_MODE=fake` in payment-service.
 
-When this repo is `fake`, the checkout page shows a "Pay ${price} Now" button instead of PayPal Buttons. That button still calls `createPayPalOrder()` then `capturePayPalOrder()` against payment-service, so payment-service must also be fake if you want deterministic fake responses and no PayPal API calls.
+When this repo is `fake`, the checkout page shows a test payment button instead of PayPal Buttons. That button still calls `createPayPalOrder()` then `capturePayPalOrder()` against payment-service, so payment-service must also be fake if you want deterministic fake responses and no PayPal API calls.
 
 Do not run this repo in fake mode against a real PayPal payment-service. The fake button has no PayPal buyer approval step, so immediate capture cannot satisfy a real PayPal order flow.
 

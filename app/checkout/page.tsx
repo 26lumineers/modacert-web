@@ -777,12 +777,12 @@ function PaymentStep({ brandName, requestId, amount, loading, onBack, onFakePaym
           <div className="relative max-w-sm">
             <p className="font-auth text-xl text-mc-orange">{brandName}</p>
             <h2 className="mt-3 font-auth text-5xl leading-none">Payment Details</h2>
-            <p className="mt-4 text-sm leading-6 text-white/72">Choose an available payment method to complete your authentication request.</p>
+            <p className="mt-4 text-sm leading-6 text-white/72">{PAYMENT_MODE === "fake" ? "Use test payment to complete your authentication request while PayPal is unavailable." : "Choose an available payment method to complete your authentication request."}</p>
           </div>
         </div>
         <div className="self-center p-5 lg:p-8">
-          <div className="grid grid-cols-3 gap-3">
-            {["Card", "Apple Pay", "PayPal"].map((method) => (
+          <div className={`grid gap-3 ${PAYMENT_MODE === "fake" ? "grid-cols-1" : "grid-cols-3"}`}>
+            {(PAYMENT_MODE === "fake" ? ["Test Payment"] : ["Card", "Apple Pay", "PayPal"]).map((method) => (
               <div key={method} className="rounded-[1rem] border border-mc-muted bg-white px-3 py-4 text-center text-xs font-bold text-mc-ink shadow-card">
                 {method}
               </div>
@@ -800,7 +800,7 @@ function PaymentStep({ brandName, requestId, amount, loading, onBack, onFakePaym
             </dl>
             {PAYMENT_MODE === "fake" ? (
               <button type="button" onClick={onFakePayment} disabled={loading} className="mt-6 h-[56px] w-full rounded-[20px] bg-black px-6 font-auth text-2xl text-white shadow-auth-input hover:bg-mc-brown disabled:opacity-55">
-                {loading ? "Processing" : `Pay ${amount} Now`}
+                {loading ? "Processing" : `Test Pay ${amount}`}
               </button>
             ) : PAYPAL_CLIENT_ID ? (
               <div className="mt-6">
